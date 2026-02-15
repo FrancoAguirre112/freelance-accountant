@@ -7,6 +7,7 @@ import {
   startOfMonth,
   endOfMonth,
   isSameMonth,
+  addHours,
 } from "date-fns";
 import { es } from "date-fns/locale";
 import {
@@ -22,7 +23,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { getSalaryCoverageAction } from "@/app/actions";
 
-// 1. Definimos la interfaz para los datos del estado (adiós 'any')
 interface SalaryMonthData {
   date: Date;
   amount: number;
@@ -37,17 +37,17 @@ interface SalaryTabProps {
 }
 
 export function SalaryTab({ from, to }: SalaryTabProps) {
-  // 2. Usamos el tipo definido en el useState
   const [data, setData] = React.useState<SalaryMonthData[]>([]);
   const [loading, setLoading] = React.useState(true);
-
-  // Opcional: Podrías traer esto de la DB si el usuario lo cambia,
-  // pero por ahora se sobrescribirá con lo que venga de getSalaryCoverageAction
   const [targetAmount] = React.useState(400);
 
   React.useEffect(() => {
     async function load() {
       setLoading(true);
+
+      // Generating months.
+      // Note: We use the 'from' prop directly. If page.tsx passed a date at 12:00,
+      // these will likely be at 12:00 or 00:00 depending on the browser.
       const months = eachMonthOfInterval({
         start: startOfMonth(from),
         end: endOfMonth(to),
@@ -56,18 +56,19 @@ export function SalaryTab({ from, to }: SalaryTabProps) {
       const coverageData = await getSalaryCoverageAction(from, to);
 
       const formattedData: SalaryMonthData[] = months.map((monthDate) => {
-        // Buscamos datos del servidor para este mes
+        // Safe comparison for finding data
+        // We compare using isSameMonth which is generally robust,
+        // but rely on the server response string 'd.month' (ISO)
         const found = coverageData.find((d) =>
           isSameMonth(new Date(d.month), monthDate),
         );
 
-        // Si la DB devuelve un target (suma de recurrentes), lo usamos. Si no, usamos 0.
-        // Si no hay target definido en la DB, asumimos que no hay objetivo configurado (0).
         const currentTarget = found
           ? found.target
           : coverageData.length > 0
             ? coverageData[0].target
             : targetAmount;
+
         const amount = found ? found.amount : 0;
 
         return {
@@ -101,7 +102,7 @@ export function SalaryTab({ from, to }: SalaryTabProps) {
   const totalCollected = data.reduce((acc, curr) => acc + curr.amount, 0);
   const totalPercentage =
     totalTarget > 0 ? (totalCollected / totalTarget) * 100 : 0;
-  // Usamos el target del último mes para mostrar en el header de la tabla
+
   const currentMonthlyTarget =
     data.length > 0 ? data[data.length - 1].target : 0;
 
@@ -134,7 +135,6 @@ export function SalaryTab({ from, to }: SalaryTabProps) {
               ${totalCollected.toLocaleString()}
             </div>
             <p className="text-muted-foreground text-xs">
-              {/* 3. Corregido: Comillas escapadas con &quot; */}
               Categoría &quot;Sueldo / RTN&quot;
             </p>
           </CardContent>
@@ -177,10 +177,17 @@ export function SalaryTab({ from, to }: SalaryTabProps) {
           </TableHeader>
           <TableBody>
             {data.map((row, i) => {
-              const monthName = format(row.date, "MMMM yyyy", { locale: es });
+              // --- TIMEZONE FIX ---
+              // Create a safe display date by forcing it to the 15th of the month.
+              // This ensures that even if the date is 00:00 and shifts back to the previous day,
+              // or matches the previous month, setting it to the middle guarantees the correct month name.
+              const safeDate = new Date(row.date);
+              safeDate.setDate(15);
+
+              const monthName = format(safeDate, "MMMM yyyy", { locale: es });
               const capitalizedMonth =
                 monthName.charAt(0).toUpperCase() + monthName.slice(1);
-              // Calculamos la diferencia
+
               const difference = row.amount - row.target;
 
               return (

@@ -117,7 +117,7 @@ export function DashboardTab({ data }: { data: Transaction[] }) {
   }, [data]);
 
   return (
-    <div className="gap-4 grid md:grid-cols-2 lg:grid-cols-7">
+    <div className="gap-4 grid md:grid-cols-2 lg:grid-cols-7 w-full">
       <Card className="col-span-4">
         <CardHeader>
           <CardTitle>Ingresos Reales por Mes</CardTitle>

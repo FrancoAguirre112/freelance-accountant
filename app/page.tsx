@@ -15,6 +15,8 @@ import { ClientsDatabaseDialog } from "@/components/clients-database-dialog";
 import { ActiveFilters } from "@/components/active-filters";
 import { FiltersDialog } from "@/components/filters-dialog";
 
+export const dynamic = "force-dynamic"; // Ensure Vercel doesn't cache this page statically
+
 export default async function DashboardPage({
   searchParams,
 }: {
@@ -39,8 +41,8 @@ export default async function DashboardPage({
     (p) => p.status === "en_desarrollo",
   );
 
-  // --- FIX DE ZONA HORARIA ---
-  // Usamos T12:00:00 para caer en el mediodía y evitar saltos de día por GMT
+  // --- 1. INPUT FIX: Filter Range at Noon ---
+  // We use T12:00:00 so the filter range itself starts safely in the middle of the day
   const fromDate = params.from
     ? new Date(params.from + "T12:00:00")
     : startOfMonth(new Date());
@@ -49,8 +51,8 @@ export default async function DashboardPage({
     ? new Date(params.to + "T12:00:00")
     : endOfMonth(new Date());
 
-  // 3. Consulta Maestra
-  let allTransactions = await db.query.transactions.findMany({
+  // 2. FETCH DATA
+  const rawTransactions = await db.query.transactions.findMany({
     where: between(transactions.date, fromDate, toDate),
     with: {
       project: { with: { client: true } },
@@ -59,7 +61,28 @@ export default async function DashboardPage({
     orderBy: [desc(transactions.date)],
   });
 
-  // --- 4. LÓGICA DE FILTRADO COMBINABLE ---
+  // --- 3. OUTPUT FIX (THE GENERAL FIX) ---
+  // Normalize all dates to Noon UTC before passing them to the UI.
+  // This prevents the "previous day" bug when the browser (e.g., GMT-3) subtracts hours from Midnight UTC.
+  let allTransactions = rawTransactions.map((t) => {
+    // Force 'date' to Noon UTC
+    const safeDate = new Date(t.date);
+    safeDate.setUTCHours(12, 0, 0, 0);
+
+    // Force 'imputedDate' to Noon UTC
+    const safeImputed = t.imputedDate
+      ? new Date(t.imputedDate)
+      : new Date(t.date);
+    safeImputed.setUTCHours(12, 0, 0, 0);
+
+    return {
+      ...t,
+      date: safeDate,
+      imputedDate: safeImputed,
+    };
+  });
+
+  // --- 4. FILTERING LOGIC ---
   if (params.clientId) {
     const filterId = parseInt(params.clientId);
     allTransactions = allTransactions.filter((t) => {
@@ -95,9 +118,6 @@ export default async function DashboardPage({
           Freelance Dashboard
         </h1>
         <div className="flex items-center gap-4">
-          <ClientsDatabaseDialog clients={allClients} />
-          <FiltersDialog clients={allClients} projects={allProjects} />
-          <div className="mx-2 bg-border w-[1px] h-8" />
           <CSVImporter />
           <AddDataDialog
             clientsData={activeClients}
@@ -111,12 +131,19 @@ export default async function DashboardPage({
       <ActiveFilters clients={allClients} projects={allProjects} />
 
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="overview">Dashboard</TabsTrigger>
-          <TabsTrigger value="transactions">Movimientos</TabsTrigger>
-          <TabsTrigger value="projects">Proyectos</TabsTrigger>
-          <TabsTrigger value="salary">Sueldos (RTN)</TabsTrigger>
-          <TabsTrigger value="maintenance">Mantenimientos</TabsTrigger>
+        <TabsList className="flex justify-between bg-white w-full">
+          <div className="bg-gray-100 p-1 rounded-md">
+            <TabsTrigger value="overview">Dashboard</TabsTrigger>
+            <TabsTrigger value="transactions">Movimientos</TabsTrigger>
+            <TabsTrigger value="projects">Proyectos</TabsTrigger>
+            <TabsTrigger value="salary">Sueldos (RTN)</TabsTrigger>
+            <TabsTrigger value="maintenance">Mantenimientos</TabsTrigger>
+          </div>
+
+          <div className="flex gap-2 bg-white">
+            <ClientsDatabaseDialog clients={allClients} />
+            <FiltersDialog clients={allClients} projects={allProjects} />
+          </div>
         </TabsList>
 
         <TabsContent value="overview">

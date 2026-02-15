@@ -152,7 +152,6 @@ export function MaintenanceTab({ from, to }: MaintenanceTabProps) {
             ) : (
               data.map((item) => (
                 <React.Fragment key={item.serviceId}>
-                  {/* FILA PRINCIPAL */}
                   <TableRow
                     className={cn(
                       "hover:bg-muted/50 transition-colors cursor-pointer",
@@ -197,7 +196,6 @@ export function MaintenanceTab({ from, to }: MaintenanceTabProps) {
                     </TableCell>
                   </TableRow>
 
-                  {/* DETALLE EXPANDIDO */}
                   {expandedRows[item.serviceId] && (
                     <TableRow className="bg-muted/30 hover:bg-muted/30">
                       <TableCell colSpan={5} className="p-0">
@@ -207,15 +205,23 @@ export function MaintenanceTab({ from, to }: MaintenanceTabProps) {
                           </h4>
                           <div className="gap-3 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6">
                             {item.details.map((month: any, idx: number) => {
-                              // --- FIX DE VISUALIZACIÓN ---
-                              // 1. Convertimos string a Objeto Fecha
-                              const dateObj = new Date(month.date);
-                              // 2. Le ponemos 12:00 del mediodía para evitar saltos de día por zona horaria
-                              dateObj.setHours(12);
-                              // 3. Formateamos
-                              const monthName = format(dateObj, "MMM yyyy", {
-                                locale: es,
-                              });
+                              // --- FIX DE ZONA HORARIA DEFINITIVO ---
+                              // El servidor manda '2026-01-01T00:00:00Z' (Midnight UTC)
+                              const utcDate = new Date(month.date);
+
+                              // Extraemos partes UTC (así ignoramos si el navegador está en GMT-3)
+                              const year = utcDate.getUTCFullYear();
+                              const monthIndex = utcDate.getUTCMonth(); // 0 = Enero
+
+                              // Creamos una fecha "Local" forzada con esos valores UTC
+                              // Esto hace que el navegador crea que "Enero" es "Enero" localmente
+                              const displayDate = new Date(year, monthIndex, 1);
+
+                              const monthName = format(
+                                displayDate,
+                                "MMM yyyy",
+                                { locale: es },
+                              );
 
                               return (
                                 <div

@@ -8,7 +8,7 @@ import {
   recurringServices,
 } from "@/db/schema";
 import { revalidatePath } from "next/cache";
-import { type InferInsertModel, eq, and, between, desc } from "drizzle-orm";
+import { type InferInsertModel, eq, and, between } from "drizzle-orm";
 import {
   startOfMonth,
   endOfMonth,
@@ -340,8 +340,14 @@ export async function deleteRecurringServiceAction(id: number) {
   }
 }
 
+function toNoonUTC(date: Date) {
+  const d = new Date(date);
+  d.setUTCHours(12, 0, 0, 0);
+  return d;
+}
+
 export async function getSalaryCoverageAction(from: Date, to: Date) {
-  // 1. Obtenemos el "Objetivo Mensual" sumando todos los servicios recurrentes de tipo "salary"
+  // 1. Get Monthly Target
   const salaryServices = await db.query.recurringServices.findMany({
     where: eq(recurringServices.type, "salary"),
   });
@@ -351,7 +357,7 @@ export async function getSalaryCoverageAction(from: Date, to: Date) {
     0,
   );
 
-  // 2. Buscamos todas las transacciones de categoría "salary" en el rango de fechas
+  // 2. Fetch Transactions
   const salaryTransactions = await db.query.transactions.findMany({
     where: and(
       eq(transactions.category, "salary"),
@@ -359,23 +365,24 @@ export async function getSalaryCoverageAction(from: Date, to: Date) {
     ),
   });
 
-  // 3. Agrupamos los ingresos por mes
+  // 3. Group by Month (with Noon Shift)
   const coverageMap = new Map<string, number>();
 
   salaryTransactions.forEach((t) => {
-    // Usamos el inicio del mes como clave para agrupar
-    const monthKey = startOfMonth(t.date).toISOString();
+    // a. Get the start of the month for this transaction
+    const monthStart = startOfMonth(t.date);
+    // b. Force it to Noon UTC before turning it into a string key
+    const safeMonth = toNoonUTC(monthStart);
+
+    const monthKey = safeMonth.toISOString();
     const currentAmount = coverageMap.get(monthKey) || 0;
     coverageMap.set(monthKey, currentAmount + t.amount);
   });
 
-  // 4. Formateamos la respuesta
-  // Convertimos el mapa a un array.
-  // Nota: Si un mes no tiene transacciones, no aparecerá aquí,
-  // pero el componente SalaryTab rellena los huecos usando 'eachMonthOfInterval'.
+  // 4. Format Response
   const results = Array.from(coverageMap.entries()).map(
     ([monthIso, amount]) => ({
-      month: monthIso, // Devolvemos string ISO para serialización segura
+      month: monthIso,
       amount: amount,
       target: totalMonthlyTarget,
     }),
@@ -385,7 +392,7 @@ export async function getSalaryCoverageAction(from: Date, to: Date) {
 }
 
 export async function getMaintenanceCoverageAction(from: Date, to: Date) {
-  // 1. Fetch all active maintenance services
+  // 1. Fetch Services
   const services = await db.query.recurringServices.findMany({
     where: eq(recurringServices.type, "maintenance"),
     with: {
@@ -393,27 +400,24 @@ export async function getMaintenanceCoverageAction(from: Date, to: Date) {
     },
   });
 
-  // 2. Fetch transactions linked to these services in the date range
+  // 2. Fetch Transactions
   const relatedTransactions = await db.query.transactions.findMany({
     where: and(
-      // We filter by category OR if it has a serviceId linked (more robust)
-      // For simplicity, we assume maintenance transactions have category 'maintenance'
       eq(transactions.category, "maintenance"),
       between(transactions.date, from, to),
     ),
   });
 
-  // 3. Generate the timeline (months)
+  // 3. Generate Timeline (with Noon Shift)
+  // We generate the months, then immediately force them to Noon.
+  // This ensures the Client receives "2026-01-01T12:00:00Z" instead of "00:00:00Z"
   const months = eachMonthOfInterval({
     start: startOfMonth(from),
     end: endOfMonth(to),
-  });
+  }).map(toNoonUTC);
 
-  // 4. Build the structured data
+  // 4. Build Structure
   const results = services.map((service) => {
-    // Filter transactions for this specific service
-    // We match by serviceId (ideal) or fallback to matching Description/Client if you used the old import method
-    // Since we fixed the import, we rely on serviceId primarily.
     const serviceTrans = relatedTransactions.filter(
       (t) => t.serviceId === service.id,
     );
@@ -422,21 +426,19 @@ export async function getMaintenanceCoverageAction(from: Date, to: Date) {
     let totalCollected = 0;
 
     const monthDetails = months.map((monthDate) => {
-      // Find payments that fall into this month
-      // Logic: A transaction 'pays' for the month it is imputed to (imputedDate)
-      // or the real date if imputed is missing.
+      // Logic: Check if transaction imputed date (or real date) falls in this month
       const paymentsInMonth = serviceTrans.filter((t) =>
         isSameMonth(t.imputedDate || t.date, monthDate),
       );
 
       const paidAmount = paymentsInMonth.reduce((sum, t) => sum + t.amount, 0);
-      const isCovered = paidAmount >= service.amount; // Allow partial coverage logic if needed
+      const isCovered = paidAmount >= service.amount;
 
       if (isCovered) monthsCoveredCount++;
       totalCollected += paidAmount;
 
       return {
-        date: monthDate,
+        date: monthDate, // This is now safe (Noon UTC)
         target: service.amount,
         paid: paidAmount,
         status: isCovered ? "paid" : paidAmount > 0 ? "partial" : "pending",
@@ -452,7 +454,7 @@ export async function getMaintenanceCoverageAction(from: Date, to: Date) {
       totalTarget: service.amount * months.length,
       monthsCovered: monthsCoveredCount,
       totalMonths: months.length,
-      details: monthDetails, // The detailed breakdown
+      details: monthDetails,
     };
   });
 
