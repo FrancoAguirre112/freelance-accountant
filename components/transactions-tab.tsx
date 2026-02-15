@@ -1,5 +1,10 @@
 import { db } from "@/db";
-import { transactions } from "@/db/schema";
+import {
+  transactions,
+  projects,
+  recurringServices,
+  clients,
+} from "@/db/schema";
 import { between, desc } from "drizzle-orm";
 import { format } from "date-fns";
 import {
@@ -8,27 +13,52 @@ import {
   TableCell,
   TableHead,
   TableHeader,
-  TableRow, // Corregido: Shadcn utiliza TableRow
+  TableRow,
 } from "@/components/ui/table";
-import { CSVImporter } from "./csv-importer";
 import { Badge } from "@/components/ui/badge";
+import { RowActions } from "@/components/tables/row-actions";
+import { type InferSelectModel } from "drizzle-orm";
 
-// Definimos el tipo de categoría basado en los valores permitidos en tu esquema
+// 1. Define extended type to include relations (Client/Project/Service)
+interface TransactionWithRelations extends InferSelectModel<
+  typeof transactions
+> {
+  project?: ({ name: string } & { client?: { name: string } | null }) | null;
+  service?: ({ name: string } & { client?: { name: string } | null }) | null;
+}
+
 type TransactionCategory = "project" | "salary" | "maintenance" | "other";
 
-export async function TransactionsTab({ from, to }: { from: Date; to: Date }) {
-  // Consulta a Turso filtrada por el rango del calendario
-  const data = await db.query.transactions.findMany({
-    where: between(transactions.date, from, to),
-    orderBy: [desc(transactions.date)],
-  });
+export async function TransactionsTab({
+  from,
+  to,
+  preFilteredData,
+}: {
+  from: Date;
+  to: Date;
+  preFilteredData?: TransactionWithRelations[];
+}) {
+  let data: TransactionWithRelations[];
 
-  // Tipamos el objeto de colores usando Record con nuestra unión de categorías
+  if (preFilteredData) {
+    data = preFilteredData;
+  } else {
+    // 2. Update fallback query to fetch relations if no pre-filtered data exists
+    data = await db.query.transactions.findMany({
+      where: between(transactions.date, from, to),
+      with: {
+        project: { with: { client: true } },
+        service: { with: { client: true } },
+      },
+      orderBy: [desc(transactions.date)],
+    });
+  }
+
   const categoryColors: Record<TransactionCategory, string> = {
-    maintenance: "bg-purple-100 text-purple-700 border-purple-200", // Violeta
-    project: "bg-blue-100 text-blue-700 border-blue-200", // Azul
-    salary: "bg-green-100 text-green-700 border-green-200", // Verde
-    other: "bg-gray-100 text-gray-700 border-gray-200", // Gris
+    maintenance: "bg-purple-100 text-purple-700 border-purple-200",
+    project: "bg-blue-100 text-blue-700 border-blue-200",
+    salary: "bg-green-100 text-green-700 border-green-200",
+    other: "bg-gray-100 text-gray-700 border-gray-200",
   };
 
   return (
@@ -42,41 +72,76 @@ export async function TransactionsTab({ from, to }: { from: Date; to: Date }) {
           <TableHeader>
             <TableRow>
               <TableHead>Fecha Real</TableHead>
+              {/* 3. New Column Header */}
+              <TableHead>Cliente / Origen</TableHead>
               <TableHead>Categoría</TableHead>
               <TableHead>Descripción</TableHead>
               <TableHead className="text-right">Monto (USD)</TableHead>
+              <TableHead className="w-[50px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {data.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={4}
+                  colSpan={6}
                   className="py-8 text-muted-foreground text-center"
                 >
                   No hay movimientos en este rango de fechas.
                 </TableCell>
               </TableRow>
             ) : (
-              data.map((t) => (
-                <TableRow key={t.id}>
-                  <TableCell>{format(t.date, "dd/MM/yyyy")}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="outline"
-                      className={
-                        categoryColors[t.category as TransactionCategory]
-                      }
-                    >
-                      {t.category}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="font-medium">{t.description}</TableCell>
-                  <TableCell className="font-bold text-green-600 text-right">
-                    + ${t.amount.toFixed(2)}
-                  </TableCell>
-                </TableRow>
-              ))
+              data.map((t) => {
+                // Determine Client and Source names
+                const clientName =
+                  t.project?.client?.name ||
+                  t.service?.client?.name ||
+                  "Sin Cliente";
+
+                const sourceName =
+                  t.project?.name || t.service?.name || "Movimiento Directo";
+
+                return (
+                  <TableRow key={t.id}>
+                    <TableCell className="min-w-[100px]">
+                      {format(t.date, "dd/MM/yyyy")}
+                    </TableCell>
+
+                    {/* 3. New Column Content */}
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="font-medium text-sm">
+                          {clientName}
+                        </span>
+                        <span className="text-muted-foreground text-xs">
+                          {sourceName}
+                        </span>
+                      </div>
+                    </TableCell>
+
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={
+                          categoryColors[t.category as TransactionCategory] ||
+                          categoryColors.other
+                        }
+                      >
+                        {t.category}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="font-medium text-muted-foreground">
+                      {t.description || "-"}
+                    </TableCell>
+                    <TableCell className="font-bold text-green-600 text-right">
+                      + ${t.amount.toFixed(2)}
+                    </TableCell>
+                    <TableCell>
+                      <RowActions row={t} type="transaction" />
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>

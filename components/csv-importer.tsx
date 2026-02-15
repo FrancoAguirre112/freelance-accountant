@@ -2,136 +2,237 @@
 
 import * as React from "react";
 import Papa from "papaparse";
+import { Upload, Download, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { bulkSmartImportAction } from "@/app/actions";
 import { toast } from "sonner";
-import { type InferInsertModel } from "drizzle-orm";
-import {
-  clients,
-  projects,
-  transactions,
-  recurringServices,
-} from "@/db/schema";
 
-// 1. Tipos de inserción de Drizzle
-type NewClient = InferInsertModel<typeof clients>;
-type NewProject = InferInsertModel<typeof projects>;
-type NewTransaction = InferInsertModel<typeof transactions>;
-type NewRecurring = InferInsertModel<typeof recurringServices>;
-type TransactionCategory = "project" | "salary" | "maintenance" | "other";
-
-// 2. Estructura del acumulador de importación
-interface ImportData {
-  clients: NewClient[];
-  projects: NewProject[];
-  transactions: NewTransaction[];
-  recurring: NewRecurring[];
-}
-
-interface SmartCSVRow {
-  TipoDato: "movimiento" | "proyecto" | "cliente" | "recurrente";
+// Interfaz que coincide con las columnas de tu CSV
+interface CSVRow {
+  TipoDato: string;
   Nombre?: string;
-  ClienteId?: string;
+  Vinculo?: string;
   Monto?: string;
   Fecha?: string;
   FechaImputada?: string;
   Categoria?: string;
   Concepto?: string;
+  Estado?: string;
 }
 
 export function CSVImporter() {
   const [loading, setLoading] = React.useState(false);
+  const [isOpen, setIsOpen] = React.useState(false);
+
+  const handleDownloadTemplate = () => {
+    const csvContent = [
+      "TipoDato,Nombre,Vinculo,Monto,Fecha,FechaImputada,Categoria,Concepto,Estado",
+      "cliente,Mermoz,,,,,,,",
+      "proyecto,Web Mermoz,Mermoz,1500.00,,,,,en_desarrollo",
+      "recurrente,Mantenimiento Mensual,Mermoz,50.00,,,,,maintenance",
+      "movimiento,Web Mermoz,,500.00,2024-03-01,2024-03-01,project,Pago Hito 1,",
+      "movimiento,,,100.00,2024-03-05,,other,Gasto vario,",
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "plantilla_inteligente_dashboard.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setLoading(true);
-    Papa.parse<SmartCSVRow>(file, {
+    Papa.parse<CSVRow>(file, {
       header: true,
       skipEmptyLines: true,
       complete: async (results) => {
-        // Inicialización con el tipo ImportData
-        const importData: ImportData = {
-          clients: [],
-          projects: [],
-          transactions: [],
-          recurring: [],
+        // Preparamos los contenedores de datos limpios
+        // Nota: Estos tipos coinciden con lo que espera bulkSmartImportAction
+        const payload = {
+          clients: [] as { name: string }[],
+          projects: [] as {
+            name: string;
+            clientName: string;
+            totalAmount: number;
+            status: string;
+          }[],
+          recurring: [] as {
+            name: string;
+            clientName: string;
+            amount: number;
+            type: string;
+          }[],
+          transactions: [] as {
+            date: Date;
+            imputedDate: Date;
+            amount: number;
+            category: string;
+            description: string;
+            targetName?: string;
+          }[],
         };
 
         results.data.forEach((row) => {
-          switch (row.TipoDato) {
+          // Normalización segura para evitar errores si la columna viene vacía
+          const type = row.TipoDato ? row.TipoDato.toLowerCase().trim() : "";
+          const name = row.Nombre ? row.Nombre.trim() : "";
+          const link = row.Vinculo ? row.Vinculo.trim() : "";
+          const amount = parseFloat(row.Monto || "0");
+
+          switch (type) {
             case "cliente":
-              if (row.Nombre) {
-                importData.clients.push({ name: row.Nombre, status: "active" });
-              }
+              if (name) payload.clients.push({ name });
               break;
+
             case "proyecto":
-              if (row.Nombre && row.ClienteId) {
-                importData.projects.push({
-                  name: row.Nombre,
-                  clientId: Number(row.ClienteId),
-                  totalAmount: parseFloat(row.Monto || "0"),
-                  status: "en_desarrollo",
+              if (name && link) {
+                payload.projects.push({
+                  name,
+                  clientName: link,
+                  totalAmount: amount,
+                  status: row.Estado || "en_desarrollo",
                 });
               }
               break;
+
+            case "recurrente":
+              if (name && link) {
+                payload.recurring.push({
+                  name,
+                  clientName: link,
+                  amount,
+                  type: (row.Categoria || "maintenance") as string,
+                });
+              }
+              break;
+
             case "movimiento":
               if (row.Fecha) {
-                importData.transactions.push({
+                payload.transactions.push({
                   date: new Date(row.Fecha),
                   imputedDate: row.FechaImputada
                     ? new Date(row.FechaImputada)
                     : new Date(row.Fecha),
-                  amount: parseFloat(row.Monto || "0"),
-                  category: row.Categoria as TransactionCategory, // Casting seguro
+                  amount,
+                  category: (row.Categoria || "other") as string,
                   description: row.Concepto || "",
-                  status: "paid",
-                });
-              }
-              break;
-            case "recurrente":
-              if (row.Nombre && row.ClienteId && row.Categoria) {
-                importData.recurring.push({
-                  name: row.Nombre,
-                  clientId: Number(row.ClienteId),
-                  amount: parseFloat(row.Monto || "0"),
-                  type: row.Categoria as "maintenance" | "salary",
+                  // Si hay un nombre en la fila de movimiento, lo usamos para vincular
+                  targetName: name || undefined,
                 });
               }
               break;
           }
         });
 
-        const res = await bulkSmartImportAction(importData);
+        // Enviamos todo al servidor para la resolución inteligente
+        const res = await bulkSmartImportAction(payload);
+
         if (res.success) {
-          toast.success("Importación inteligente completada", {
-            description: "Todos los datos han sido procesados y guardados.",
+          toast.success("Importación Exitosa", {
+            description: `Se procesaron ${results.data.length} filas y se vincularon automáticamente.`,
           });
+          setIsOpen(false);
         } else {
-          toast.error("Error en la importación masiva");
+          toast.error("Error en la importación", {
+            description: "Verifica que el CSV tenga el formato correcto.",
+          });
         }
+
         setLoading(false);
+        // Limpiamos el input para permitir subir el mismo archivo de nuevo si es necesario
+        e.target.value = "";
       },
     });
   };
 
   return (
-    <div className="flex gap-2">
-      <input
-        type="file"
-        id="smart-csv"
-        className="hidden"
-        onChange={handleFile}
-        accept=".csv"
-      />
-      <Button
-        variant="outline"
-        onClick={() => document.getElementById("smart-csv")?.click()}
-        disabled={loading}
-      >
-        {loading ? "Procesando..." : "Subir CSV Inteligente"}
-      </Button>
-    </div>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" className="gap-2">
+          <Upload className="w-4 h-4" />
+          Importar CSV
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[600px]">
+        <DialogHeader>
+          <DialogTitle>Importación Masiva Inteligente</DialogTitle>
+          <DialogDescription>
+            Sube un CSV. El sistema resolverá y vinculará automáticamente
+            Clientes, Proyectos y Pagos por nombre.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="gap-6 grid py-4">
+          <div className="space-y-3 bg-muted/50 p-4 border rounded-md text-muted-foreground text-sm">
+            <h4 className="flex items-center gap-2 font-semibold text-foreground">
+              <FileSpreadsheet className="w-4 h-4" /> Formato Requerido
+              (Nombres, no IDs):
+            </h4>
+            <ul className="space-y-1 pl-5 list-disc">
+              <li>
+                <strong>Proyectos:</strong> Columna &apos;Vinculo&apos; = Nombre
+                del Cliente.
+              </li>
+              <li>
+                <strong>Movimientos:</strong> Columna &apos;Nombre&apos; =
+                Nombre del Proyecto/Servicio al que pertenece (Opcional).
+              </li>
+            </ul>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleDownloadTemplate}
+              className="mt-2 w-full"
+            >
+              <Download className="mr-2 w-4 h-4" /> Descargar Plantilla Nueva
+            </Button>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="csv-upload" className="font-medium text-base">
+              Seleccionar Archivo
+            </Label>
+            <Button
+              variant="default"
+              disabled={loading}
+              className="relative w-full"
+              onClick={() => document.getElementById("csv-upload")?.click()}
+            >
+              {loading ? (
+                "Analizando y Vinculando..."
+              ) : (
+                <>
+                  <Upload className="mr-2 w-4 h-4" /> Subir Archivo
+                </>
+              )}
+              <input
+                id="csv-upload"
+                type="file"
+                className="hidden"
+                onChange={handleFile}
+                accept=".csv"
+                disabled={loading}
+              />
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

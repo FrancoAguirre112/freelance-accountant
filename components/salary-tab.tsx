@@ -1,6 +1,6 @@
-import { db } from "@/db";
-import { transactions, recurringServices } from "@/db/schema";
-import { eq, and, between } from "drizzle-orm";
+"use client";
+
+import * as React from "react";
 import {
   format,
   eachMonthOfInterval,
@@ -8,6 +8,7 @@ import {
   endOfMonth,
   isSameMonth,
 } from "date-fns";
+import { es } from "date-fns/locale";
 import {
   Table,
   TableBody,
@@ -17,37 +18,154 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { getSalaryCoverageAction } from "@/app/actions";
 
-export async function SalaryTab({ from, to }: { from: Date; to: Date }) {
-  // 1. Obtenemos el "contrato" de sueldo (ej: RTN $400)
-  const salaryContract = await db.query.recurringServices.findFirst({
-    where: eq(recurringServices.type, "salary"),
-  });
+// 1. Definimos la interfaz para los datos del estado (adiós 'any')
+interface SalaryMonthData {
+  date: Date;
+  amount: number;
+  target: number;
+  percentage: number;
+  isCovered: boolean;
+}
 
-  // 2. Obtenemos todas las transacciones de sueldo en el rango (usando fecha imputada)
-  const salaryTransactions = await db.query.transactions.findMany({
-    where: and(
-      eq(transactions.category, "salary"),
-      between(transactions.imputedDate, from, to),
-    ),
-  });
+interface SalaryTabProps {
+  from: Date;
+  to: Date;
+}
 
-  // 3. Generamos la lista de meses a mostrar basándonos en el filtro global
-  const monthsInRange = eachMonthOfInterval({ start: from, end: to });
+export function SalaryTab({ from, to }: SalaryTabProps) {
+  // 2. Usamos el tipo definido en el useState
+  const [data, setData] = React.useState<SalaryMonthData[]>([]);
+  const [loading, setLoading] = React.useState(true);
 
-  const monthlyTarget = salaryContract?.amount || 0;
+  // Opcional: Podrías traer esto de la DB si el usuario lo cambia,
+  // pero por ahora se sobrescribirá con lo que venga de getSalaryCoverageAction
+  const [targetAmount] = React.useState(400);
+
+  React.useEffect(() => {
+    async function load() {
+      setLoading(true);
+      const months = eachMonthOfInterval({
+        start: startOfMonth(from),
+        end: endOfMonth(to),
+      });
+
+      const coverageData = await getSalaryCoverageAction(from, to);
+
+      const formattedData: SalaryMonthData[] = months.map((monthDate) => {
+        // Buscamos datos del servidor para este mes
+        const found = coverageData.find((d) =>
+          isSameMonth(new Date(d.month), monthDate),
+        );
+
+        // Si la DB devuelve un target (suma de recurrentes), lo usamos. Si no, usamos 0.
+        // Si no hay target definido en la DB, asumimos que no hay objetivo configurado (0).
+        const currentTarget = found
+          ? found.target
+          : coverageData.length > 0
+            ? coverageData[0].target
+            : targetAmount;
+        const amount = found ? found.amount : 0;
+
+        return {
+          date: monthDate,
+          amount,
+          target: currentTarget,
+          percentage:
+            currentTarget > 0
+              ? Math.min(100, (amount / currentTarget) * 100)
+              : 0,
+          isCovered: amount >= currentTarget && currentTarget > 0,
+        };
+      });
+
+      setData(formattedData);
+      setLoading(false);
+    }
+
+    load();
+  }, [from, to, targetAmount]);
+
+  if (loading) {
+    return (
+      <div className="py-8 text-muted-foreground text-center">
+        Calculando cobertura...
+      </div>
+    );
+  }
+
+  const totalTarget = data.reduce((acc, curr) => acc + curr.target, 0);
+  const totalCollected = data.reduce((acc, curr) => acc + curr.amount, 0);
+  const totalPercentage =
+    totalTarget > 0 ? (totalCollected / totalTarget) * 100 : 0;
+  // Usamos el target del último mes para mostrar en el header de la tabla
+  const currentMonthlyTarget =
+    data.length > 0 ? data[data.length - 1].target : 0;
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h2 className="font-semibold text-xl">Cobertura de Sueldo (RTN)</h2>
-        <div className="text-muted-foreground text-sm">
-          Objetivo mensual:{" "}
-          <span className="font-bold text-foreground">${monthlyTarget}</span>
-        </div>
+    <div className="space-y-6">
+      <div className="gap-4 grid md:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row justify-between items-center space-y-0 pb-2">
+            <CardTitle className="font-medium text-sm">
+              Objetivo Acumulado
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="font-bold text-2xl">
+              ${totalTarget.toLocaleString()}
+            </div>
+            <p className="text-muted-foreground text-xs">
+              Suma de objetivos en el periodo
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row justify-between items-center space-y-0 pb-2">
+            <CardTitle className="font-medium text-sm">
+              Cobrado Real (Salary)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="font-bold text-green-600 text-2xl">
+              ${totalCollected.toLocaleString()}
+            </div>
+            <p className="text-muted-foreground text-xs">
+              {/* 3. Corregido: Comillas escapadas con &quot; */}
+              Categoría &quot;Sueldo / RTN&quot;
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row justify-between items-center space-y-0 pb-2">
+            <CardTitle className="font-medium text-sm">
+              Cobertura Global
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="font-bold text-2xl">
+              {totalPercentage.toFixed(1)}%
+            </div>
+            <Progress value={totalPercentage} className="mt-2 h-2" />
+          </CardContent>
+        </Card>
       </div>
 
       <div className="bg-white border rounded-md">
+        <div className="flex justify-between items-center bg-gray-50 p-4 border-b">
+          <h3 className="font-semibold text-lg">Cobertura de Sueldo (RTN)</h3>
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground text-sm">
+              Objetivo mensual:
+            </span>
+            <span className="font-bold">
+              ${currentMonthlyTarget.toLocaleString()}
+            </span>
+          </div>
+        </div>
         <Table>
           <TableHeader>
             <TableRow>
@@ -58,45 +176,51 @@ export async function SalaryTab({ from, to }: { from: Date; to: Date }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {monthsInRange.map((month) => {
-              // Sumamos lo recibido para ESTE mes específico
-              const amountReceived = salaryTransactions
-                .filter(
-                  (t) => t.imputedDate && isSameMonth(t.imputedDate, month),
-                )
-                .reduce((acc, t) => acc + t.amount, 0);
-
-              const isCovered = amountReceived >= monthlyTarget;
-              const isPartial =
-                amountReceived > 0 && amountReceived < monthlyTarget;
+            {data.map((row, i) => {
+              const monthName = format(row.date, "MMMM yyyy", { locale: es });
+              const capitalizedMonth =
+                monthName.charAt(0).toUpperCase() + monthName.slice(1);
+              // Calculamos la diferencia
+              const difference = row.amount - row.target;
 
               return (
-                <TableRow key={month.toISOString()}>
+                <TableRow key={i}>
                   <TableCell className="font-medium capitalize">
-                    {format(month, "MMMM yyyy")}
-                  </TableCell>
-                  <TableCell className="font-semibold">
-                    ${amountReceived.toLocaleString()}
+                    {capitalizedMonth}
                   </TableCell>
                   <TableCell>
-                    {isCovered ? (
-                      <Badge className="bg-green-100 border-green-200 text-green-700">
-                        Cubierto
-                      </Badge>
-                    ) : isPartial ? (
-                      <Badge className="bg-yellow-100 border-yellow-200 text-yellow-700">
-                        Parcial
-                      </Badge>
-                    ) : (
-                      <Badge className="bg-red-100 border-red-200 text-red-700">
-                        Pendiente
-                      </Badge>
-                    )}
+                    <span
+                      className={
+                        row.amount > 0
+                          ? "font-bold text-green-700"
+                          : "text-muted-foreground"
+                      }
+                    >
+                      ${row.amount.toLocaleString()}
+                    </span>
                   </TableCell>
-                  <TableCell className="text-muted-foreground text-xs text-right">
-                    {isCovered
-                      ? "Meta alcanzada"
-                      : `Faltan $${(monthlyTarget - amountReceived).toLocaleString()}`}
+                  <TableCell>
+                    <Badge
+                      variant={row.isCovered ? "default" : "secondary"}
+                      className={
+                        row.isCovered
+                          ? "bg-green-100 text-green-800 hover:bg-green-200 border-green-200"
+                          : "bg-red-50 text-red-800 hover:bg-red-100 border-red-200"
+                      }
+                    >
+                      {row.isCovered ? "Cubierto" : "Pendiente"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm text-right">
+                    {row.isCovered ? (
+                      <span className="flex justify-end items-center gap-1 text-green-600">
+                        Superavit: +${difference.toLocaleString()}
+                      </span>
+                    ) : (
+                      <span>
+                        Faltan ${Math.abs(difference).toLocaleString()}
+                      </span>
+                    )}
                   </TableCell>
                 </TableRow>
               );

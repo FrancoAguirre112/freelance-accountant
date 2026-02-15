@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { RowActions } from "./tables/row-actions";
 
 export async function ProjectsTab() {
   // Traemos proyectos con sus transacciones asociadas
@@ -36,6 +37,7 @@ export async function ProjectsTab() {
               <TableHead>Cobrado</TableHead>
               <TableHead>Progreso</TableHead>
               <TableHead className="text-right">Estado</TableHead>
+              <TableHead className="w-[50px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -88,6 +90,9 @@ export async function ProjectsTab() {
                     <Badge variant="outline" className={statusColor}>
                       {statusLabel}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <RowActions row={project} type="project" />
                   </TableCell>
                 </TableRow>
               );

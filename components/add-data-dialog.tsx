@@ -21,6 +21,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ClientCombobox } from "@/components/client-combobox";
+import { ProjectCombobox } from "@/components/project-combobox";
 import {
   createTransactionAction,
   createProjectAction,
@@ -30,7 +32,7 @@ import {
 import { type InferSelectModel } from "drizzle-orm";
 import { clients, projects } from "@/db/schema";
 
-// Tipado estricto basado en el esquema de base de datos
+// Strict typing based on database schema
 type Client = InferSelectModel<typeof clients>;
 type Project = InferSelectModel<typeof projects>;
 type TransactionCategory = "project" | "salary" | "maintenance" | "other";
@@ -44,11 +46,12 @@ export function AddDataDialog({
 }) {
   const [open, setOpen] = React.useState(false);
 
-  // --- MANEJADORES DE SUBMIT ---
+  // --- MANEJADORES DE SUBMIT (Modo Continuo) ---
 
   async function handleTransactionSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const formData = new FormData(e.currentTarget);
+    const form = e.currentTarget; // Guardamos referencia al form
+    const formData = new FormData(form);
 
     const res = await createTransactionAction({
       date: new Date(formData.get("date") as string),
@@ -65,31 +68,38 @@ export function AddDataDialog({
     });
 
     if (res.success) {
-      toast.success("Transacción guardada correctamente");
-      setOpen(false);
+      toast.success("Transacción guardada", {
+        description: "Puedes seguir agregando más.",
+      });
+      // Reseteamos los inputs de texto (Monto, Descripción, Fecha)
+      // Nota: Los Comboboxes de React mantendrán su estado, lo cual es útil para cargas masivas del mismo proyecto.
+      form.reset();
+      // NO cerramos el modal: setOpen(false) eliminado.
     }
   }
 
   async function handleProjectSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const formData = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const formData = new FormData(form);
 
     const res = await createProjectAction({
       name: formData.get("name") as string,
-      clientId: Number(formData.get("clientId")),
+      clientName: formData.get("clientName") as string,
       totalAmount: parseFloat(formData.get("totalAmount") as string),
       status: "en_desarrollo",
     });
 
     if (res.success) {
       toast.success("Proyecto creado exitosamente");
-      setOpen(false);
+      form.reset();
     }
   }
 
   async function handleClientSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const formData = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const formData = new FormData(form);
 
     const res = await createClientAction({
       name: formData.get("name") as string,
@@ -97,25 +107,26 @@ export function AddDataDialog({
     });
 
     if (res.success) {
-      toast.success("Cliente agregado a la base de datos");
-      setOpen(false);
+      toast.success("Cliente agregado");
+      form.reset();
     }
   }
 
   async function handleRecurringSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const formData = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const formData = new FormData(form);
 
     const res = await createRecurringServiceAction({
       name: formData.get("name") as string,
-      clientId: Number(formData.get("clientId")),
+      clientName: formData.get("clientName") as string,
       amount: parseFloat(formData.get("amount") as string),
       type: formData.get("type") as "maintenance" | "salary",
     });
 
     if (res.success) {
-      toast.success("Servicio recurrente configurado correctamente");
-      setOpen(false);
+      toast.success("Servicio recurrente configurado");
+      form.reset();
     }
   }
 
@@ -126,6 +137,8 @@ export function AddDataDialog({
           <Plus className="w-4 h-4" /> Agregar Dato
         </Button>
       </DialogTrigger>
+      {/* Añadimos z-index alto para asegurar que el modal esté bien posicionado, 
+          aunque los Toasts de Sonner suelen renderizarse en un Portal aparte con z-9999 */}
       <DialogContent className="sm:max-w-[550px]">
         <DialogHeader>
           <DialogTitle>Carga Manual de Datos</DialogTitle>
@@ -139,12 +152,13 @@ export function AddDataDialog({
             <TabsTrigger value="recurring">Recurr.</TabsTrigger>
           </TabsList>
 
-          {/* TAB: TRANSACCIÓN */}
+          {/* TAB: TRANSACTION */}
           <TabsContent value="transaction">
             <form onSubmit={handleTransactionSubmit} className="space-y-4 py-4">
               <div className="gap-4 grid grid-cols-2">
                 <div className="space-y-2">
                   <Label>Fecha Real</Label>
+                  {/* defaultValue={new Date().toISOString().split('T')[0]} ayuda a tener hoy por defecto */}
                   <Input name="date" type="date" required />
                 </div>
                 <div className="space-y-2">
@@ -158,7 +172,13 @@ export function AddDataDialog({
               </div>
               <div className="space-y-2">
                 <Label>Monto (USD)</Label>
-                <Input name="amount" type="number" step="0.01" required />
+                <Input
+                  name="amount"
+                  type="number"
+                  step="0.01"
+                  required
+                  autoFocus
+                />
               </div>
               <div className="space-y-2">
                 <Label>Categoría</Label>
@@ -178,26 +198,34 @@ export function AddDataDialog({
               </div>
               <div className="space-y-2">
                 <Label>Vincular a Proyecto</Label>
-                <Select name="projectId">
-                  <SelectTrigger>
-                    <SelectValue placeholder="Opcional" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projectsData.map((p) => (
-                      <SelectItem key={p.id} value={p.id.toString()}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <ProjectCombobox projects={projectsData} name="projectId" />
               </div>
-              <Button type="submit" className="w-full">
-                Guardar Transacción
-              </Button>
+              <div className="space-y-2">
+                <Label>Descripción</Label>
+                <Input
+                  name="description"
+                  placeholder="Ej: Pago Hito 1"
+                  required
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <Button type="submit" className="flex-1">
+                  Guardar y Seguir
+                </Button>
+                {/* Botón opcional para cerrar manualmente si se desea */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setOpen(false)}
+                >
+                  Cerrar
+                </Button>
+              </div>
             </form>
           </TabsContent>
 
-          {/* TAB: PROYECTO */}
+          {/* TAB: PROJECT */}
           <TabsContent value="project">
             <form onSubmit={handleProjectSubmit} className="space-y-4 py-4">
               <div className="space-y-2">
@@ -208,21 +236,16 @@ export function AddDataDialog({
                   required
                 />
               </div>
+
               <div className="space-y-2">
                 <Label>Cliente</Label>
-                <Select name="clientId" required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar cliente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clientsData.map((c) => (
-                      <SelectItem key={c.id} value={c.id.toString()}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <ClientCombobox
+                  clients={clientsData}
+                  name="clientName"
+                  required
+                />
               </div>
+
               <div className="space-y-2">
                 <Label>Presupuesto Total (USD)</Label>
                 <Input name="totalAmount" type="number" step="0.01" required />
@@ -233,7 +256,7 @@ export function AddDataDialog({
             </form>
           </TabsContent>
 
-          {/* TAB: CLIENTE */}
+          {/* TAB: CLIENT */}
           <TabsContent value="client">
             <form onSubmit={handleClientSubmit} className="space-y-4 py-4">
               <div className="space-y-2">
@@ -246,7 +269,7 @@ export function AddDataDialog({
             </form>
           </TabsContent>
 
-          {/* TAB: RECURRENTE */}
+          {/* TAB: RECURRING */}
           <TabsContent value="recurring">
             <form onSubmit={handleRecurringSubmit} className="space-y-4 py-4">
               <div className="space-y-2">
@@ -271,21 +294,16 @@ export function AddDataDialog({
                   </SelectContent>
                 </Select>
               </div>
+
               <div className="space-y-2">
                 <Label>Cliente</Label>
-                <Select name="clientId" required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Vincular cliente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clientsData.map((c) => (
-                      <SelectItem key={c.id} value={c.id.toString()}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <ClientCombobox
+                  clients={clientsData}
+                  name="clientName"
+                  required
+                />
               </div>
+
               <div className="space-y-2">
                 <Label>Monto Mensual Objetivo (USD)</Label>
                 <Input name="amount" type="number" step="0.01" required />
