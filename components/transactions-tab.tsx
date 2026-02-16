@@ -1,7 +1,6 @@
 import { db } from "@/db";
 import { transactions } from "@/db/schema";
 import { between, desc } from "drizzle-orm";
-import { format } from "date-fns";
 import {
   Table,
   TableBody,
@@ -13,6 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { RowActions } from "@/components/tables/row-actions";
 import { type InferSelectModel } from "drizzle-orm";
+import { formatSafeDate } from "@/lib/date-utils";
 
 // 1. Define a more flexible type for the joined data
 // We extend the base transaction model to include optional relation properties
@@ -107,7 +107,7 @@ export async function TransactionsTab({
                 return (
                   <TableRow key={t.id}>
                     <TableCell className="min-w-[100px]">
-                      {format(t.date, "dd/MM/yyyy")}
+                      {formatSafeDate(t.date, "dd/MM/yyyy")}
                     </TableCell>
 
                     <TableCell>

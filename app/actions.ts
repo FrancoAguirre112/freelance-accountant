@@ -333,6 +333,7 @@ function toNoonUTC(date: Date) {
 }
 
 export async function getSalaryCoverageAction(from: Date, to: Date) {
+  // Ensure we query the full days
   const dbFrom = new Date(from);
   dbFrom.setHours(0, 0, 0, 0);
   const dbTo = new Date(to);
@@ -354,26 +355,23 @@ export async function getSalaryCoverageAction(from: Date, to: Date) {
     ),
   });
 
+  // Group by STRING KEY "YYYY-MM"
+  // This is timezone-proof because ISO string is standard
   const coverageMap = new Map<string, number>();
 
   salaryTransactions.forEach((t) => {
-    const monthStart = startOfMonth(t.date);
-    const safeMonth = toNoonUTC(monthStart);
-
-    const monthKey = safeMonth.toISOString();
+    // Extract "2026-01" from "2026-01-05T..."
+    const monthKey = t.date.toISOString().slice(0, 7);
     const currentAmount = coverageMap.get(monthKey) || 0;
     coverageMap.set(monthKey, currentAmount + t.amount);
   });
 
-  const results = Array.from(coverageMap.entries()).map(
-    ([monthIso, amount]) => ({
-      month: monthIso,
-      amount: amount,
-      target: totalMonthlyTarget,
-    }),
-  );
-
-  return results;
+  // Return simple object: { "2026-01": 500, "2026-02": 0 }
+  return {
+    monthlyTarget: totalMonthlyTarget,
+    // Convert Map to plain object
+    data: Object.fromEntries(coverageMap),
+  };
 }
 
 export async function getMaintenanceCoverageAction(from: Date, to: Date) {
@@ -384,9 +382,7 @@ export async function getMaintenanceCoverageAction(from: Date, to: Date) {
 
   const services = await db.query.recurringServices.findMany({
     where: eq(recurringServices.type, "maintenance"),
-    with: {
-      client: true,
-    },
+    with: { client: true },
   });
 
   const relatedTransactions = await db.query.transactions.findMany({
@@ -396,36 +392,23 @@ export async function getMaintenanceCoverageAction(from: Date, to: Date) {
     ),
   });
 
-  const months = eachMonthOfInterval({
-    start: startOfMonth(from),
-    end: endOfMonth(to),
-  }).map(toNoonUTC);
-
   const results = services.map((service) => {
+    // Get transactions for this service
     const serviceTrans = relatedTransactions.filter(
       (t) => t.serviceId === service.id,
     );
 
-    let monthsCoveredCount = 0;
+    // Group payments by month key "YYYY-MM"
+    const paymentsByMonth: Record<string, number> = {};
     let totalCollected = 0;
 
-    const monthDetails = months.map((monthDate) => {
-      const paymentsInMonth = serviceTrans.filter((t) =>
-        isSameMonth(t.imputedDate || t.date, monthDate),
-      );
+    serviceTrans.forEach((t) => {
+      // Use imputedDate if available, otherwise real date
+      const dateToUse = t.imputedDate || t.date;
+      const key = dateToUse.toISOString().slice(0, 7); // "2026-01"
 
-      const paidAmount = paymentsInMonth.reduce((sum, t) => sum + t.amount, 0);
-      const isCovered = paidAmount >= service.amount;
-
-      if (isCovered) monthsCoveredCount++;
-      totalCollected += paidAmount;
-
-      return {
-        date: monthDate,
-        target: service.amount,
-        paid: paidAmount,
-        status: isCovered ? "paid" : paidAmount > 0 ? "partial" : "pending",
-      };
+      paymentsByMonth[key] = (paymentsByMonth[key] || 0) + t.amount;
+      totalCollected += t.amount;
     });
 
     return {
@@ -434,10 +417,8 @@ export async function getMaintenanceCoverageAction(from: Date, to: Date) {
       clientName: service.client?.name || "Sin Cliente",
       monthlyFee: service.amount,
       totalCollected,
-      totalTarget: service.amount * months.length,
-      monthsCovered: monthsCoveredCount,
-      totalMonths: months.length,
-      details: monthDetails,
+      // We return the raw map of payments: { "2026-01": 200, "2026-02": 0 }
+      paymentsByMonth,
     };
   });
 
