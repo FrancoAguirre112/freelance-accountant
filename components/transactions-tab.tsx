@@ -1,10 +1,5 @@
 import { db } from "@/db";
-import {
-  transactions,
-  projects,
-  recurringServices,
-  clients,
-} from "@/db/schema";
+import { transactions } from "@/db/schema";
 import { between, desc } from "drizzle-orm";
 import { format } from "date-fns";
 import {
@@ -19,12 +14,19 @@ import { Badge } from "@/components/ui/badge";
 import { RowActions } from "@/components/tables/row-actions";
 import { type InferSelectModel } from "drizzle-orm";
 
-// 1. Define extended type to include relations (Client/Project/Service)
-interface TransactionWithRelations extends InferSelectModel<
-  typeof transactions
-> {
-  project?: ({ name: string } & { client?: { name: string } | null }) | null;
-  service?: ({ name: string } & { client?: { name: string } | null }) | null;
+// 1. Define a more flexible type for the joined data
+// We extend the base transaction model to include optional relation properties
+type TransactionModel = InferSelectModel<typeof transactions>;
+
+interface TransactionWithRelations extends TransactionModel {
+  project?: {
+    name: string;
+    client?: { name: string } | null;
+  } | null;
+  service?: {
+    name: string;
+    client?: { name: string } | null;
+  } | null;
 }
 
 type TransactionCategory = "project" | "salary" | "maintenance" | "other";
@@ -36,15 +38,16 @@ export async function TransactionsTab({
 }: {
   from: Date;
   to: Date;
-  preFilteredData?: TransactionWithRelations[];
+  preFilteredData?: any[]; // Relaxed type here to accept the Drizzle result directly
 }) {
   let data: TransactionWithRelations[];
 
   if (preFilteredData) {
-    data = preFilteredData;
+    // We cast the pre-filtered data to our interface
+    data = preFilteredData as TransactionWithRelations[];
   } else {
-    // 2. Update fallback query to fetch relations if no pre-filtered data exists
-    data = await db.query.transactions.findMany({
+    // 2. Fallback query
+    const result = await db.query.transactions.findMany({
       where: between(transactions.date, from, to),
       with: {
         project: { with: { client: true } },
@@ -52,6 +55,7 @@ export async function TransactionsTab({
       },
       orderBy: [desc(transactions.date)],
     });
+    data = result as TransactionWithRelations[];
   }
 
   const categoryColors: Record<TransactionCategory, string> = {
@@ -72,7 +76,6 @@ export async function TransactionsTab({
           <TableHeader>
             <TableRow>
               <TableHead>Fecha Real</TableHead>
-              {/* 3. New Column Header */}
               <TableHead>Cliente / Origen</TableHead>
               <TableHead>Categoría</TableHead>
               <TableHead>Descripción</TableHead>
@@ -92,7 +95,7 @@ export async function TransactionsTab({
               </TableRow>
             ) : (
               data.map((t) => {
-                // Determine Client and Source names
+                // Determine Client and Source names safely
                 const clientName =
                   t.project?.client?.name ||
                   t.service?.client?.name ||
@@ -107,7 +110,6 @@ export async function TransactionsTab({
                       {format(t.date, "dd/MM/yyyy")}
                     </TableCell>
 
-                    {/* 3. New Column Content */}
                     <TableCell>
                       <div className="flex flex-col">
                         <span className="font-medium text-sm">

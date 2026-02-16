@@ -15,7 +15,7 @@ import { ClientsDatabaseDialog } from "@/components/clients-database-dialog";
 import { ActiveFilters } from "@/components/active-filters";
 import { FiltersDialog } from "@/components/filters-dialog";
 
-export const dynamic = "force-dynamic"; // Ensure Vercel doesn't cache this page statically
+export const dynamic = "force-dynamic";
 
 export default async function DashboardPage({
   searchParams,
@@ -31,30 +31,31 @@ export default async function DashboardPage({
 }) {
   const params = await searchParams;
 
-  // 1. FETCH ALL DATA (Clients, Projects, AND Services)
   const [allClients, allProjects, allServices] = await Promise.all([
     db.query.clients.findMany(),
     db.query.projects.findMany(),
-    db.query.recurringServices.findMany(), // <--- NEW: Fetch Services
+    db.query.recurringServices.findMany(),
   ]);
 
   const activeClients = allClients.filter((c) => c.status === "active");
   const activeProjects = allProjects.filter(
     (p) => p.status === "en_desarrollo",
   );
-  // We pass all services to the dropdown so you can link payments to any service
   const activeServices = allServices;
 
-  // --- 2. INPUT FIX: Filter Range at Noon ---
+  // --- CORRECCIÓN AQUÍ ---
+  // Para BUSCAR en la base de datos, necesitamos el día completo.
+  // Desde el primer milisegundo del día 'from'...
   const fromDate = params.from
-    ? new Date(params.from + "T12:00:00")
+    ? new Date(params.from + "T00:00:00")
     : startOfMonth(new Date());
 
+  // ...hasta el último milisegundo del día 'to'.
   const toDate = params.to
-    ? new Date(params.to + "T12:00:00")
+    ? new Date(params.to + "T23:59:59.999")
     : endOfMonth(new Date());
 
-  // 3. FETCH TRANSACTIONS
+  // 2. FETCH DATA (Ahora sí incluye las transacciones de las 00:00hs)
   const rawTransactions = await db.query.transactions.findMany({
     where: between(transactions.date, fromDate, toDate),
     with: {
@@ -64,14 +65,14 @@ export default async function DashboardPage({
     orderBy: [desc(transactions.date)],
   });
 
-  // --- 4. OUTPUT FIX (TIMEZONE GENERAL FIX) ---
-  // Normalize all dates to Noon UTC before passing them to the UI.
+  // --- 3. OUTPUT FIX (VISUALIZACIÓN) ---
+  // Una vez que tenemos los datos, AQUÍ sí forzamos el mediodía.
+  // Esto es solo "cosmético" para que el navegador no reste horas y cambie el día.
   let allTransactions = rawTransactions.map((t) => {
-    // Force 'date' to Noon UTC
+    // Forzamos visualización a las 12:00 UTC
     const safeDate = new Date(t.date);
     safeDate.setUTCHours(12, 0, 0, 0);
 
-    // Force 'imputedDate' to Noon UTC
     const safeImputed = t.imputedDate
       ? new Date(t.imputedDate)
       : new Date(t.date);
@@ -84,7 +85,7 @@ export default async function DashboardPage({
     };
   });
 
-  // --- 5. FILTERING LOGIC ---
+  // --- 4. FILTERING LOGIC ---
   if (params.clientId) {
     const filterId = parseInt(params.clientId);
     allTransactions = allTransactions.filter((t) => {
@@ -124,7 +125,7 @@ export default async function DashboardPage({
           <AddDataDialog
             clientsData={activeClients}
             projectsData={activeProjects}
-            servicesData={activeServices} // <--- NEW PROP PASSED HERE
+            servicesData={activeServices}
           />
           <div className="mx-2 bg-border w-[1px] h-8" />
           <DateRangePicker />
@@ -134,7 +135,6 @@ export default async function DashboardPage({
       <ActiveFilters clients={allClients} projects={allProjects} />
 
       <Tabs defaultValue="overview" className="space-y-4">
-        {/* Customized TabsList Layout */}
         <TabsList className="flex justify-between bg-transparent p-0 w-full h-auto">
           <div className="flex bg-muted p-1 rounded-md">
             <TabsTrigger value="overview">Dashboard</TabsTrigger>
