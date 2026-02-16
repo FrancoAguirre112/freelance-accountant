@@ -31,18 +31,21 @@ export default async function DashboardPage({
 }) {
   const params = await searchParams;
 
-  const [allClients, allProjects] = await Promise.all([
+  // 1. FETCH ALL DATA (Clients, Projects, AND Services)
+  const [allClients, allProjects, allServices] = await Promise.all([
     db.query.clients.findMany(),
     db.query.projects.findMany(),
+    db.query.recurringServices.findMany(), // <--- NEW: Fetch Services
   ]);
 
   const activeClients = allClients.filter((c) => c.status === "active");
   const activeProjects = allProjects.filter(
     (p) => p.status === "en_desarrollo",
   );
+  // We pass all services to the dropdown so you can link payments to any service
+  const activeServices = allServices;
 
-  // --- 1. INPUT FIX: Filter Range at Noon ---
-  // We use T12:00:00 so the filter range itself starts safely in the middle of the day
+  // --- 2. INPUT FIX: Filter Range at Noon ---
   const fromDate = params.from
     ? new Date(params.from + "T12:00:00")
     : startOfMonth(new Date());
@@ -51,7 +54,7 @@ export default async function DashboardPage({
     ? new Date(params.to + "T12:00:00")
     : endOfMonth(new Date());
 
-  // 2. FETCH DATA
+  // 3. FETCH TRANSACTIONS
   const rawTransactions = await db.query.transactions.findMany({
     where: between(transactions.date, fromDate, toDate),
     with: {
@@ -61,9 +64,8 @@ export default async function DashboardPage({
     orderBy: [desc(transactions.date)],
   });
 
-  // --- 3. OUTPUT FIX (THE GENERAL FIX) ---
+  // --- 4. OUTPUT FIX (TIMEZONE GENERAL FIX) ---
   // Normalize all dates to Noon UTC before passing them to the UI.
-  // This prevents the "previous day" bug when the browser (e.g., GMT-3) subtracts hours from Midnight UTC.
   let allTransactions = rawTransactions.map((t) => {
     // Force 'date' to Noon UTC
     const safeDate = new Date(t.date);
@@ -82,7 +84,7 @@ export default async function DashboardPage({
     };
   });
 
-  // --- 4. FILTERING LOGIC ---
+  // --- 5. FILTERING LOGIC ---
   if (params.clientId) {
     const filterId = parseInt(params.clientId);
     allTransactions = allTransactions.filter((t) => {
@@ -122,6 +124,7 @@ export default async function DashboardPage({
           <AddDataDialog
             clientsData={activeClients}
             projectsData={activeProjects}
+            servicesData={activeServices} // <--- NEW PROP PASSED HERE
           />
           <div className="mx-2 bg-border w-[1px] h-8" />
           <DateRangePicker />
@@ -131,8 +134,9 @@ export default async function DashboardPage({
       <ActiveFilters clients={allClients} projects={allProjects} />
 
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList className="flex justify-between bg-white w-full">
-          <div className="bg-gray-100 p-1 rounded-md">
+        {/* Customized TabsList Layout */}
+        <TabsList className="flex justify-between bg-transparent p-0 w-full h-auto">
+          <div className="flex bg-muted p-1 rounded-md">
             <TabsTrigger value="overview">Dashboard</TabsTrigger>
             <TabsTrigger value="transactions">Movimientos</TabsTrigger>
             <TabsTrigger value="projects">Proyectos</TabsTrigger>
@@ -140,7 +144,7 @@ export default async function DashboardPage({
             <TabsTrigger value="maintenance">Mantenimientos</TabsTrigger>
           </div>
 
-          <div className="flex gap-2 bg-white">
+          <div className="flex gap-2">
             <ClientsDatabaseDialog clients={allClients} />
             <FiltersDialog clients={allClients} projects={allProjects} />
           </div>

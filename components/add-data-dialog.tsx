@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { ClientCombobox } from "@/components/client-combobox";
 import { ProjectCombobox } from "@/components/project-combobox";
+import { RecurringServiceCombobox } from "@/components/recurring-service-combobox";
 import {
   createTransactionAction,
   createProjectAction,
@@ -30,21 +31,26 @@ import {
   createRecurringServiceAction,
 } from "@/app/actions";
 import { type InferSelectModel } from "drizzle-orm";
-import { clients, projects } from "@/db/schema";
+import { clients, projects, recurringServices } from "@/db/schema";
 
 // Strict typing based on database schema
 type Client = InferSelectModel<typeof clients>;
 type Project = InferSelectModel<typeof projects>;
+type RecurringService = InferSelectModel<typeof recurringServices>;
 type TransactionCategory = "project" | "salary" | "maintenance" | "other";
 
 export function AddDataDialog({
   clientsData,
   projectsData,
+  servicesData,
 }: {
   clientsData: Client[];
   projectsData: Project[];
+  servicesData: RecurringService[];
 }) {
   const [open, setOpen] = React.useState(false);
+  const [selectedCategory, setSelectedCategory] =
+    React.useState<TransactionCategory>("project");
 
   // --- MANEJADORES DE SUBMIT (Modo Continuo) ---
 
@@ -63,6 +69,9 @@ export function AddDataDialog({
       description: formData.get("description") as string,
       projectId: formData.get("projectId")
         ? Number(formData.get("projectId"))
+        : null,
+      serviceId: formData.get("serviceId")
+        ? Number(formData.get("serviceId"))
         : null,
       status: "paid",
     });
@@ -182,7 +191,14 @@ export function AddDataDialog({
               </div>
               <div className="space-y-2">
                 <Label>Categoría</Label>
-                <Select name="category" required>
+                <Select
+                  name="category"
+                  required
+                  onValueChange={(val: TransactionCategory) =>
+                    setSelectedCategory(val)
+                  }
+                  defaultValue="project"
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Tipo de ingreso" />
                   </SelectTrigger>
@@ -196,10 +212,31 @@ export function AddDataDialog({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>Vincular a Proyecto</Label>
-                <ProjectCombobox projects={projectsData} name="projectId" />
-              </div>
+
+              {/* Lógica Condicional de Selectores */}
+
+              {selectedCategory === "project" && (
+                <div className="space-y-2 slide-in-from-top-1 animate-in fade-in">
+                  <Label>Vincular a Proyecto</Label>
+                  <ProjectCombobox projects={projectsData} name="projectId" />
+                </div>
+              )}
+
+              {(selectedCategory === "maintenance" ||
+                selectedCategory === "salary") && (
+                <div className="space-y-2 slide-in-from-top-1 animate-in fade-in">
+                  <Label>Vincular a Servicio Recurrente</Label>
+                  <RecurringServiceCombobox
+                    services={servicesData}
+                    name="serviceId"
+                  />
+                  <p className="text-[0.8rem] text-muted-foreground">
+                    Usa la <strong>Fecha Imputada</strong> arriba para indicar
+                    qué mes estás cobrando.
+                  </p>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label>Descripción</Label>
                 <Input
