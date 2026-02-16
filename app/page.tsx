@@ -177,7 +177,11 @@ export default async function DashboardPage({
         </TabsContent>
 
         <TabsContent value="maintenance">
-          <MaintenanceTab from={displayFrom} to={displayTo} />
+          <MaintenanceTab
+            from={displayFrom}
+            to={displayTo}
+            clients={allClients}
+          />
         </TabsContent>
       </Tabs>
     </div>

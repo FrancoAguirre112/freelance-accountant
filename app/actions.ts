@@ -414,10 +414,10 @@ export async function getMaintenanceCoverageAction(from: Date, to: Date) {
     return {
       serviceId: service.id,
       serviceName: service.name,
+      clientId: service.clientId,
       clientName: service.client?.name || "Sin Cliente",
       monthlyFee: service.amount,
       totalCollected,
-      // We return the raw map of payments: { "2026-01": 200, "2026-02": 0 }
       paymentsByMonth,
     };
   });
