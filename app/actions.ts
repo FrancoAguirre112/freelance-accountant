@@ -14,14 +14,14 @@ import {
   endOfMonth,
   eachMonthOfInterval,
   isSameMonth,
+  startOfDay,
+  endOfDay,
 } from "date-fns";
 
-// 1. Define strict types derived from the schema or for specific enums
 type NewTransaction = InferInsertModel<typeof transactions>;
 type TransactionCategory = "project" | "salary" | "maintenance" | "other";
 type RecurringType = "maintenance" | "salary";
 
-// Helper function to find or create a client
 async function findOrCreateClient(name: string): Promise<number> {
   const existingClient = await db.query.clients.findFirst({
     where: eq(clients.name, name),
@@ -143,7 +143,6 @@ type RawImportData = {
 export async function bulkSmartImportAction(data: RawImportData) {
   try {
     await db.transaction(async (tx) => {
-      // --- PHASE 1: RESOLVE CLIENTS ---
       const clientMap = new Map<string, number>();
 
       const existingClients = await tx.query.clients.findMany();
@@ -160,7 +159,6 @@ export async function bulkSmartImportAction(data: RawImportData) {
         }
       }
 
-      // --- PHASE 2: RESOLVE PROJECTS AND SERVICES ---
       const projectMap = new Map<string, number>();
       const serviceMap = new Map<string, number>();
 
@@ -174,7 +172,6 @@ export async function bulkSmartImportAction(data: RawImportData) {
         serviceMap.set(s.name.toLowerCase(), s.id),
       );
 
-      // Insert Projects
       for (const p of data.projects) {
         const clientId = clientMap.get(p.clientName.toLowerCase());
         const normalizedProjName = p.name.toLowerCase();
@@ -193,7 +190,6 @@ export async function bulkSmartImportAction(data: RawImportData) {
         }
       }
 
-      // Insert Recurring Services
       for (const r of data.recurring) {
         const clientId = clientMap.get(r.clientName.toLowerCase());
         const normalizedServiceName = r.name.toLowerCase();
@@ -212,7 +208,6 @@ export async function bulkSmartImportAction(data: RawImportData) {
         }
       }
 
-      // --- PHASE 3: TRANSACTIONS ---
       const transactionsToInsert: NewTransaction[] = data.transactions.map(
         (t) => {
           let projectId = null;
@@ -252,8 +247,6 @@ export async function bulkSmartImportAction(data: RawImportData) {
   }
 }
 
-// --- UPDATE ACTIONS ---
-
 export async function updateTransactionAction(
   id: number,
   data: Partial<InferInsertModel<typeof transactions>>,
@@ -284,10 +277,7 @@ export async function updateRecurringServiceAction(
   return { success: true };
 }
 
-// --- DELETE ACTIONS (CORREGIDAS) ---
-
 export async function deleteTransactionAction(id: number) {
-  // Las transacciones no tienen dependencias hacia abajo, se pueden borrar directo
   try {
     await db.delete(transactions).where(eq(transactions.id, id));
     revalidatePath("/");
@@ -301,13 +291,11 @@ export async function deleteTransactionAction(id: number) {
 export async function deleteProjectAction(id: number) {
   try {
     await db.transaction(async (tx) => {
-      // 1. Primero desvinculamos las transacciones asociadas (para no perder el registro financiero)
       await tx
         .update(transactions)
         .set({ projectId: null })
         .where(eq(transactions.projectId, id));
 
-      // 2. Ahora es seguro eliminar el proyecto
       await tx.delete(projects).where(eq(projects.id, id));
     });
 
@@ -322,13 +310,11 @@ export async function deleteProjectAction(id: number) {
 export async function deleteRecurringServiceAction(id: number) {
   try {
     await db.transaction(async (tx) => {
-      // 1. Desvinculamos las transacciones asociadas
       await tx
         .update(transactions)
         .set({ serviceId: null })
         .where(eq(transactions.serviceId, id));
 
-      // 2. Eliminamos el servicio
       await tx.delete(recurringServices).where(eq(recurringServices.id, id));
     });
 
@@ -347,7 +333,11 @@ function toNoonUTC(date: Date) {
 }
 
 export async function getSalaryCoverageAction(from: Date, to: Date) {
-  // 1. Get Monthly Target
+  const dbFrom = new Date(from);
+  dbFrom.setHours(0, 0, 0, 0);
+  const dbTo = new Date(to);
+  dbTo.setHours(23, 59, 59, 999);
+
   const salaryServices = await db.query.recurringServices.findMany({
     where: eq(recurringServices.type, "salary"),
   });
@@ -357,21 +347,17 @@ export async function getSalaryCoverageAction(from: Date, to: Date) {
     0,
   );
 
-  // 2. Fetch Transactions
   const salaryTransactions = await db.query.transactions.findMany({
     where: and(
       eq(transactions.category, "salary"),
-      between(transactions.date, from, to),
+      between(transactions.date, dbFrom, dbTo),
     ),
   });
 
-  // 3. Group by Month (with Noon Shift)
   const coverageMap = new Map<string, number>();
 
   salaryTransactions.forEach((t) => {
-    // a. Get the start of the month for this transaction
     const monthStart = startOfMonth(t.date);
-    // b. Force it to Noon UTC before turning it into a string key
     const safeMonth = toNoonUTC(monthStart);
 
     const monthKey = safeMonth.toISOString();
@@ -379,7 +365,6 @@ export async function getSalaryCoverageAction(from: Date, to: Date) {
     coverageMap.set(monthKey, currentAmount + t.amount);
   });
 
-  // 4. Format Response
   const results = Array.from(coverageMap.entries()).map(
     ([monthIso, amount]) => ({
       month: monthIso,
@@ -392,7 +377,11 @@ export async function getSalaryCoverageAction(from: Date, to: Date) {
 }
 
 export async function getMaintenanceCoverageAction(from: Date, to: Date) {
-  // 1. Fetch Services
+  const dbFrom = new Date(from);
+  dbFrom.setHours(0, 0, 0, 0);
+  const dbTo = new Date(to);
+  dbTo.setHours(23, 59, 59, 999);
+
   const services = await db.query.recurringServices.findMany({
     where: eq(recurringServices.type, "maintenance"),
     with: {
@@ -400,23 +389,18 @@ export async function getMaintenanceCoverageAction(from: Date, to: Date) {
     },
   });
 
-  // 2. Fetch Transactions
   const relatedTransactions = await db.query.transactions.findMany({
     where: and(
       eq(transactions.category, "maintenance"),
-      between(transactions.date, from, to),
+      between(transactions.date, dbFrom, dbTo),
     ),
   });
 
-  // 3. Generate Timeline (with Noon Shift)
-  // We generate the months, then immediately force them to Noon.
-  // This ensures the Client receives "2026-01-01T12:00:00Z" instead of "00:00:00Z"
   const months = eachMonthOfInterval({
     start: startOfMonth(from),
     end: endOfMonth(to),
   }).map(toNoonUTC);
 
-  // 4. Build Structure
   const results = services.map((service) => {
     const serviceTrans = relatedTransactions.filter(
       (t) => t.serviceId === service.id,
@@ -426,7 +410,6 @@ export async function getMaintenanceCoverageAction(from: Date, to: Date) {
     let totalCollected = 0;
 
     const monthDetails = months.map((monthDate) => {
-      // Logic: Check if transaction imputed date (or real date) falls in this month
       const paymentsInMonth = serviceTrans.filter((t) =>
         isSameMonth(t.imputedDate || t.date, monthDate),
       );
@@ -438,7 +421,7 @@ export async function getMaintenanceCoverageAction(from: Date, to: Date) {
       totalCollected += paidAmount;
 
       return {
-        date: monthDate, // This is now safe (Noon UTC)
+        date: monthDate,
         target: service.amount,
         paid: paidAmount,
         status: isCovered ? "paid" : paidAmount > 0 ? "partial" : "pending",

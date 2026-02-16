@@ -43,21 +43,28 @@ export default async function DashboardPage({
   );
   const activeServices = allServices;
 
-  // --- CORRECCIÓN AQUÍ ---
-  // Para BUSCAR en la base de datos, necesitamos el día completo.
-  // Desde el primer milisegundo del día 'from'...
-  const fromDate = params.from
+  // --- 1. QUERY DATES (Exact Boundaries for Database) ---
+  // We need 00:00 to 23:59 to catch ALL transactions
+  const queryFrom = params.from
     ? new Date(params.from + "T00:00:00")
     : startOfMonth(new Date());
 
-  // ...hasta el último milisegundo del día 'to'.
-  const toDate = params.to
+  const queryTo = params.to
     ? new Date(params.to + "T23:59:59.999")
     : endOfMonth(new Date());
 
-  // 2. FETCH DATA (Ahora sí incluye las transacciones de las 00:00hs)
+  // --- 2. DISPLAY DATES (Safe Noon for UI Components) ---
+  // We force these to 12:00 PM so they don't shift to the previous day
+  // when the browser applies the local timezone (e.g. GMT-3).
+  const displayFrom = new Date(queryFrom);
+  displayFrom.setHours(12, 0, 0, 0);
+
+  const displayTo = new Date(queryTo);
+  displayTo.setHours(12, 0, 0, 0);
+
+  // 3. FETCH TRANSACTIONS (Using QUERY dates)
   const rawTransactions = await db.query.transactions.findMany({
-    where: between(transactions.date, fromDate, toDate),
+    where: between(transactions.date, queryFrom, queryTo),
     with: {
       project: { with: { client: true } },
       service: { with: { client: true } },
@@ -65,18 +72,15 @@ export default async function DashboardPage({
     orderBy: [desc(transactions.date)],
   });
 
-  // --- 3. OUTPUT FIX (VISUALIZACIÓN) ---
-  // Una vez que tenemos los datos, AQUÍ sí forzamos el mediodía.
-  // Esto es solo "cosmético" para que el navegador no reste horas y cambie el día.
+  // 4. NORMALIZE OUTPUT (For Dashboard/Transactions List)
   let allTransactions = rawTransactions.map((t) => {
-    // Forzamos visualización a las 12:00 UTC
     const safeDate = new Date(t.date);
-    safeDate.setUTCHours(12, 0, 0, 0);
+    safeDate.setHours(12, 0, 0, 0); // Force Noon for display
 
     const safeImputed = t.imputedDate
       ? new Date(t.imputedDate)
       : new Date(t.date);
-    safeImputed.setUTCHours(12, 0, 0, 0);
+    safeImputed.setHours(12, 0, 0, 0);
 
     return {
       ...t,
@@ -85,7 +89,7 @@ export default async function DashboardPage({
     };
   });
 
-  // --- 4. FILTERING LOGIC ---
+  // --- 5. FILTERING LOGIC ---
   if (params.clientId) {
     const filterId = parseInt(params.clientId);
     allTransactions = allTransactions.filter((t) => {
@@ -155,9 +159,10 @@ export default async function DashboardPage({
         </TabsContent>
 
         <TabsContent value="transactions">
+          {/* We pass DISPLAY dates to tabs, but filtered data is already there */}
           <TransactionsTab
-            from={fromDate}
-            to={toDate}
+            from={displayFrom}
+            to={displayTo}
             preFilteredData={allTransactions}
           />
         </TabsContent>
@@ -167,11 +172,12 @@ export default async function DashboardPage({
         </TabsContent>
 
         <TabsContent value="salary">
-          <SalaryTab from={fromDate} to={toDate} />
+          {/* IMPORTANT: Passing display dates (Noon) prevents the December 2025 bug */}
+          <SalaryTab from={displayFrom} to={displayTo} />
         </TabsContent>
 
         <TabsContent value="maintenance">
-          <MaintenanceTab from={fromDate} to={toDate} />
+          <MaintenanceTab from={displayFrom} to={displayTo} />
         </TabsContent>
       </Tabs>
     </div>
