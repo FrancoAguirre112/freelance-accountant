@@ -14,6 +14,14 @@ import { CSVImporter } from "@/components/csv-importer";
 import { ClientsDatabaseDialog } from "@/components/clients-database-dialog";
 import { ActiveFilters } from "@/components/active-filters";
 import { FiltersDialog } from "@/components/filters-dialog";
+import Image from "next/image";
+import { Montserrat } from "next/font/google"; // <-- 1. Import the font
+
+// 2. Initialize Montserrat with the 'Black' weight (900)
+const montserrat = Montserrat({ 
+  subsets: ["latin"],
+  weight: "900" 
+});
 
 export const dynamic = "force-dynamic";
 
@@ -131,9 +139,21 @@ export default async function DashboardPage({
   return (
     <div className="flex flex-col gap-8 p-4 md:p-8 overflow-hidden w-full">
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-        <h1 className="font-bold text-3xl tracking-tight">
-          Freelance Dashboard
-        </h1>
+        <div className="flex items-center gap-3">
+  <Image 
+    src="/Flogo.webp" 
+    alt="Logo" 
+    width={500} 
+    height={500} 
+    className="w-10 h-10" 
+  />
+  
+
+  <h1 className={`${montserrat.className} text-[40px] leading-[40px] tracking-tight`}>
+    Fiscus
+  </h1>
+</div>
+
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full md:w-auto">
           <CSVImporter />
           <AddDataDialog
