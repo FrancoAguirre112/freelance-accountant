@@ -60,6 +60,48 @@ export async function createClientAction(
   return { success: true };
 }
 
+export async function updateClientAction(
+  id: number,
+  data: Partial<InferInsertModel<typeof clients>>,
+) {
+  try {
+    await db.update(clients).set(data).where(eq(clients.id, id));
+    revalidatePath("/");
+    return { success: true };
+  } catch (error) {
+    console.error("Error updating client:", error);
+    return { success: false, error: "No se pudo actualizar el cliente" };
+  }
+}
+
+export async function deleteClientAction(id: number) {
+  try {
+    // Check if client has ANY associated projects or recurring services
+    const associatedProjects = await db.query.projects.findFirst({
+      where: eq(projects.clientId, id),
+    });
+
+    const associatedServices = await db.query.recurringServices.findFirst({
+      where: eq(recurringServices.clientId, id),
+    });
+
+    if (associatedProjects || associatedServices) {
+      return { 
+        success: false, 
+        error: "No se puede eliminar. El cliente tiene proyectos o servicios vinculados." 
+      };
+    }
+
+    // Safe to delete physically
+    await db.delete(clients).where(eq(clients.id, id));
+    revalidatePath("/");
+    return { success: true };
+  } catch (error) {
+    console.error("Error al eliminar cliente permanente:", error);
+    return { success: false, error: "Error de integridad de base de datos al eliminar." };
+  }
+}
+
 export async function createProjectAction(data: {
   name: string;
   clientName: string;
@@ -335,9 +377,9 @@ function toNoonUTC(date: Date) {
 export async function getSalaryCoverageAction(from: Date, to: Date) {
   // Ensure we query the full days
   const dbFrom = new Date(from);
-  dbFrom.setHours(0, 0, 0, 0);
+  dbFrom.setUTCHours(0, 0, 0, 0);
   const dbTo = new Date(to);
-  dbTo.setHours(23, 59, 59, 999);
+  dbTo.setUTCHours(23, 59, 59, 999);
 
   const salaryServices = await db.query.recurringServices.findMany({
     where: eq(recurringServices.type, "salary"),
@@ -376,9 +418,9 @@ export async function getSalaryCoverageAction(from: Date, to: Date) {
 
 export async function getMaintenanceCoverageAction(from: Date, to: Date) {
   const dbFrom = new Date(from);
-  dbFrom.setHours(0, 0, 0, 0);
+  dbFrom.setUTCHours(0, 0, 0, 0);
   const dbTo = new Date(to);
-  dbTo.setHours(23, 59, 59, 999);
+  dbTo.setUTCHours(23, 59, 59, 999);
 
   const services = await db.query.recurringServices.findMany({
     where: eq(recurringServices.type, "maintenance"),

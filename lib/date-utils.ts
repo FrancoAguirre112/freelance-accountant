@@ -70,15 +70,11 @@ export function getQueryBounds(
 
   // Default to start/end of current month if no params
   const start = from
-    ? new Date(from)
-    : new Date(now.getFullYear(), now.getMonth(), 1);
+    ? new Date(from + "T00:00:00Z")
+    : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const end = to
-    ? new Date(to)
-    : new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
-  // Force Full Day Range (00:00:00 to 23:59:59)
-  start.setHours(0, 0, 0, 0);
-  end.setHours(23, 59, 59, 999);
+    ? new Date(to + "T23:59:59.999Z")
+    : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999));
 
   return { start, end };
 }

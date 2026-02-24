@@ -67,7 +67,7 @@ export async function TransactionsTab({
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <h2 className="font-semibold text-xl">Historial de Movimientos</h2>
       </div>
 

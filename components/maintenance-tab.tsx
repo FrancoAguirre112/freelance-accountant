@@ -22,42 +22,74 @@ import { Card, CardContent } from "@/components/ui/card";
 import { getMaintenanceCoverageAction } from "@/app/actions";
 import { getSafeMonthsInRange } from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
-import { MaintenanceRowActions } from "@/components/maintenance-row-actions"; // <--- Importar
+import { MaintenanceRowActions } from "@/components/maintenance-row-actions";
+import { type InferSelectModel } from "drizzle-orm";
+import { clients, transactions, recurringServices } from "@/db/schema";
+
+type Client = InferSelectModel<typeof clients>;
+type Transaction = InferSelectModel<typeof transactions>;
+type Service = InferSelectModel<typeof recurringServices> & {
+  client: Client | null;
+};
 
 interface MaintenanceTabProps {
   from: Date;
   to: Date;
-  clients: { id: number; name: string }[]; // <--- Nueva prop
+  clients: Client[];
+  transactions: Transaction[];
+  services: Service[];
 }
 
-export function MaintenanceTab({ from, to, clients }: MaintenanceTabProps) {
-  const [data, setData] = React.useState<any[]>([]);
-  const [loading, setLoading] = React.useState(true);
+export function MaintenanceTab({
+  from,
+  to,
+  clients,
+  transactions,
+  services,
+}: MaintenanceTabProps) {
   const [expandedRows, setExpandedRows] = React.useState<
     Record<number, boolean>
   >({});
 
-  // Función para recargar datos (se pasa al hijo para que actualice tras editar/borrar)
-  const loadData = React.useCallback(async () => {
-    setLoading(true);
-    const res = await getMaintenanceCoverageAction(from, to);
-    setData(res);
-    setLoading(false);
-  }, [from, to]);
-
-  React.useEffect(() => {
-    loadData();
-  }, [loadData]);
-
   const toggleRow = (id: number) =>
     setExpandedRows((p) => ({ ...p, [id]: !p[id] }));
 
-  if (loading)
-    return (
-      <div className="py-12 text-muted-foreground text-center">
-        Cargando estado de mantenimientos...
-      </div>
+  // Synchronous calculation
+  const maintenanceServices = services.filter((s) => s.type === "maintenance");
+  
+  const relatedTransactions = transactions.filter(
+    (t) =>
+      t.category === "maintenance" &&
+      t.date >= new Date(from.setUTCHours(0, 0, 0, 0)) &&
+      t.date <= new Date(to.setUTCHours(23, 59, 59, 999))
+  );
+
+  const data = maintenanceServices.map((service) => {
+    const serviceTrans = relatedTransactions.filter(
+      (t) => t.serviceId === service.id
     );
+
+    const paymentsByMonth: Record<string, number> = {};
+    let totalCollected = 0;
+
+    serviceTrans.forEach((t) => {
+      const dateToUse = t.imputedDate || t.date;
+      const key = dateToUse.toISOString().slice(0, 7);
+
+      paymentsByMonth[key] = (paymentsByMonth[key] || 0) + t.amount;
+      totalCollected += t.amount;
+    });
+
+    return {
+      serviceId: service.id,
+      serviceName: service.name,
+      clientId: service.clientId,
+      clientName: service.client?.name || "Sin Cliente",
+      monthlyFee: service.amount,
+      totalCollected,
+      paymentsByMonth,
+    };
+  });
 
   // Stats Logic
   const months = getSafeMonthsInRange(from, to);
@@ -198,7 +230,6 @@ export function MaintenanceTab({ from, to, clients }: MaintenanceTabProps) {
                         <MaintenanceRowActions
                           service={item}
                           clients={clients}
-                          onUpdate={loadData}
                         />
                       </TableCell>
                     </TableRow>

@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Users, MoreHorizontal, Filter, Pencil, Trash } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
+import { updateClientAction, deleteClientAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -43,6 +45,44 @@ export function ClientsDatabaseDialog({ clients }: { clients: Client[] }) {
     params.set("clientId", clientId.toString());
     router.push(`/?${params.toString()}`);
     setOpen(false); // Close modal to see filtered dashboard
+  };
+
+  const handleEditName = async (client: Client) => {
+    const newName = window.prompt("Ingresa el nuevo nombre:", client.name);
+    if (!newName || newName === client.name) return;
+
+    toast.promise(updateClientAction(client.id, { name: newName }), {
+      loading: "Actualizando cliente...",
+      success: "Nombre actualizado",
+      error: "Error al actualizar",
+    });
+  };
+
+  const handleArchive = async (client: Client) => {
+    const isConfirmed = window.confirm(
+      `¿Seguro que deseas archivar a ${client.name}? Ya no aparecerá en los selectores. Sus proyectos y pagos seguirán existiendo en la base de datos.`
+    );
+    if (!isConfirmed) return;
+
+    toast.promise(updateClientAction(client.id, { status: "archived" }), {
+      loading: "Archivando cliente...",
+      success: "Cliente archivado. Se ocultará de la lista al refrescar.",
+      error: "Error al archivar",
+    });
+  };
+
+  const handlePermanentDelete = async (client: Client) => {
+    const isConfirmed = window.confirm(
+      `ATENCIÓN: ¿Deseas eliminar permanentemente a ${client.name} de la base de datos?\nEsta acción es ireversible. Solo se permite si no tiene proyectos ni pagos asociados.`
+    );
+    if (!isConfirmed) return;
+
+    const res = await deleteClientAction(client.id);
+    if (!res.success) {
+      toast.error(res.error);
+    } else {
+      toast.success("Cliente eliminado permanentemente.");
+    }
   };
 
   return (
@@ -99,13 +139,26 @@ export function ClientsDatabaseDialog({ clients }: { clients: Client[] }) {
                           este cliente
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={() => console.log("Editar", client.id)}
+                          onClick={() => handleEditName(client)}
                         >
                           <Pencil className="mr-2 w-4 h-4" /> Editar nombre
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="text-red-600">
-                          <Trash className="mr-2 w-4 h-4" /> Eliminar (Archivar)
-                        </DropdownMenuItem>
+
+                        {client.status === "active" ? (
+                          <DropdownMenuItem
+                            className="text-orange-600"
+                            onClick={() => handleArchive(client)}
+                          >
+                            <Trash className="mr-2 w-4 h-4" /> Archivar
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem
+                            className="text-red-600 font-bold"
+                            onClick={() => handlePermanentDelete(client)}
+                          >
+                            <Trash className="mr-2 w-4 h-4" /> Eliminar Permanente
+                          </DropdownMenuItem>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>

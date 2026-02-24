@@ -60,10 +60,10 @@ export function AddDataDialog({
     const formData = new FormData(form);
 
     const res = await createTransactionAction({
-      date: new Date(formData.get("date") as string),
+      date: new Date(formData.get("date") as string + "T12:00:00Z"),
       imputedDate: formData.get("imputedDate")
-        ? new Date(formData.get("imputedDate") as string)
-        : new Date(formData.get("date") as string),
+        ? new Date(formData.get("imputedDate") as string + "T12:00:00Z")
+        : new Date(formData.get("date") as string + "T12:00:00Z"),
       amount: parseFloat(formData.get("amount") as string),
       category: formData.get("category") as TransactionCategory,
       description: formData.get("description") as string,

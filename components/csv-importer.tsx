@@ -125,10 +125,10 @@ export function CSVImporter() {
             case "movimiento":
               if (row.Fecha) {
                 payload.transactions.push({
-                  date: new Date(row.Fecha),
+                  date: new Date(row.Fecha + "T12:00:00Z"),
                   imputedDate: row.FechaImputada
-                    ? new Date(row.FechaImputada)
-                    : new Date(row.Fecha),
+                    ? new Date(row.FechaImputada + "T12:00:00Z")
+                    : new Date(row.Fecha + "T12:00:00Z"),
                   amount,
                   category: (row.Categoria || "other") as string,
                   description: row.Concepto || "",

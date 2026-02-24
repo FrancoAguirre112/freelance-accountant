@@ -51,7 +51,7 @@ export function ClientCombobox({
       {/* Input oculto para que el FormData capture el valor */}
       <input type="hidden" name={name} value={value} required={required} />
 
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover open={open} onOpenChange={setOpen} modal={true}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"

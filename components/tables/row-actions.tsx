@@ -26,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ClientCombobox } from "@/components/client-combobox";
 import {
   deleteTransactionAction,
   deleteProjectAction,
@@ -99,6 +100,7 @@ export function RowActions({ row, type, clients, projects }: RowActionsProps) {
     } else if (type === "project") {
       res = await updateProjectAction(row.id, {
         name: formData.get("name") as string,
+        clientId: parseInt(formData.get("clientId") as string),
         totalAmount: parseFloat(formData.get("totalAmount") as string),
         status: formData.get("status") as string,
       });
@@ -206,6 +208,15 @@ export function RowActions({ row, type, clients, projects }: RowActionsProps) {
                 <div className="space-y-2">
                   <Label>Nombre</Label>
                   <Input name="name" defaultValue={row.name} required />
+                </div>
+                <div className="space-y-2">
+                  <Label>Cliente</Label>
+                  <ClientCombobox
+                    clients={clients || []}
+                    name="clientId"
+                    defaultValue={row.clientId?.toString()}
+                    required
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Presupuesto Total</Label>

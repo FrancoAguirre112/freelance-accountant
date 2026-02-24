@@ -1,6 +1,6 @@
-import { db } from "@/db";
-import { projects, transactions } from "@/db/schema";
-import { eq } from "drizzle-orm";
+"use client";
+
+import { useState } from "react";
 import {
   Table,
   TableBody,
@@ -11,21 +11,59 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { RowActions } from "./tables/row-actions";
+import { type InferSelectModel } from "drizzle-orm";
+import { projects, clients, transactions } from "@/db/schema";
 
-export async function ProjectsTab() {
-  // Traemos proyectos con sus transacciones asociadas
-  const allProjects = await db.query.projects.findMany({
-    with: {
-      transactions: true,
-      client: true,
-    },
-  });
+type Client = InferSelectModel<typeof clients>;
+type Transaction = InferSelectModel<typeof transactions>;
+type Project = InferSelectModel<typeof projects> & {
+  client: Client | null;
+  transactions: Transaction[];
+};
+
+export function ProjectsTab({
+  projects,
+  clients,
+}: {
+  projects: Project[];
+  clients: Client[];
+}) {
+  const [showFinished, setShowFinished] = useState(false);
+
+  // Calcula totales y filtra 
+  const processedProjects = projects
+    .map((project) => {
+      const totalPaid = project.transactions.reduce(
+        (acc, t) => acc + t.amount,
+        0,
+      );
+      return { ...project, totalPaid };
+    })
+    .filter((project) => {
+      if (showFinished) return true; // Mostrar todos
+      // "No finalizado" si: State no es finalizado Y (no pagó el 100% o el estado sigue siendo default)
+      return (
+        project.status !== "finalizado" && project.totalPaid < project.totalAmount
+      );
+    });
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <h2 className="font-semibold text-xl">Seguimiento de Proyectos</h2>
+        <div className="flex items-center space-x-2">
+          <Switch
+            id="show-finished"
+            checked={showFinished}
+            onCheckedChange={setShowFinished}
+          />
+          <Label htmlFor="show-finished" className="font-normal text-muted-foreground whitespace-nowrap">
+            Mostrar Finalizados
+          </Label>
+        </div>
       </div>
 
       <div className="bg-white border rounded-md">
@@ -41,11 +79,8 @@ export async function ProjectsTab() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {allProjects.map((project) => {
-              const totalPaid = project.transactions.reduce(
-                (acc, t) => acc + t.amount,
-                0,
-              );
+            {processedProjects.map((project) => {
+              const { totalPaid } = project;
               const remaining = project.totalAmount - totalPaid;
               const progressPercentage = Math.min(
                 (totalPaid / project.totalAmount) * 100,
@@ -92,7 +127,7 @@ export async function ProjectsTab() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <RowActions row={project} type="project" />
+                    <RowActions row={project} type="project" clients={clients} />
                   </TableCell>
                 </TableRow>
               );

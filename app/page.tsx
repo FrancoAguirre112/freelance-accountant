@@ -33,8 +33,17 @@ export default async function DashboardPage({
 
   const [allClients, allProjects, allServices] = await Promise.all([
     db.query.clients.findMany(),
-    db.query.projects.findMany(),
-    db.query.recurringServices.findMany(),
+    db.query.projects.findMany({
+      with: {
+        client: true,
+        transactions: true,
+      },
+    }),
+    db.query.recurringServices.findMany({
+      with: {
+        client: true,
+      },
+    }),
   ]);
 
   const activeClients = allClients.filter((c) => c.status === "active");
@@ -44,23 +53,24 @@ export default async function DashboardPage({
   const activeServices = allServices;
 
   // --- 1. QUERY DATES (Exact Boundaries for Database) ---
-  // We need 00:00 to 23:59 to catch ALL transactions
+  // We need 00:00 to 23:59 to catch ALL transactions safely
+  const now = new Date();
   const queryFrom = params.from
-    ? new Date(params.from + "T00:00:00")
-    : startOfMonth(new Date());
+    ? new Date(params.from + "T00:00:00Z")
+    : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 
   const queryTo = params.to
-    ? new Date(params.to + "T23:59:59.999")
-    : endOfMonth(new Date());
+    ? new Date(params.to + "T23:59:59.999Z")
+    : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999));
 
   // --- 2. DISPLAY DATES (Safe Noon for UI Components) ---
-  // We force these to 12:00 PM so they don't shift to the previous day
+  // We force these to 12:00 PM UTC so they don't shift to the previous day
   // when the browser applies the local timezone (e.g. GMT-3).
   const displayFrom = new Date(queryFrom);
-  displayFrom.setHours(12, 0, 0, 0);
+  displayFrom.setUTCHours(12, 0, 0, 0);
 
   const displayTo = new Date(queryTo);
-  displayTo.setHours(12, 0, 0, 0);
+  displayTo.setUTCHours(12, 0, 0, 0);
 
   // 3. FETCH TRANSACTIONS (Using QUERY dates)
   const rawTransactions = await db.query.transactions.findMany({
@@ -75,12 +85,12 @@ export default async function DashboardPage({
   // 4. NORMALIZE OUTPUT (For Dashboard/Transactions List)
   let allTransactions = rawTransactions.map((t) => {
     const safeDate = new Date(t.date);
-    safeDate.setHours(12, 0, 0, 0); // Force Noon for display
+    safeDate.setUTCHours(12, 0, 0, 0); // Force Noon UTC for display
 
     const safeImputed = t.imputedDate
       ? new Date(t.imputedDate)
       : new Date(t.date);
-    safeImputed.setHours(12, 0, 0, 0);
+    safeImputed.setUTCHours(12, 0, 0, 0);
 
     return {
       ...t,
@@ -119,19 +129,19 @@ export default async function DashboardPage({
   }
 
   return (
-    <div className="flex flex-col gap-8 p-8">
-      <div className="flex justify-between items-center">
+    <div className="flex flex-col gap-8 p-4 md:p-8 overflow-hidden w-full">
+      <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
         <h1 className="font-bold text-3xl tracking-tight">
           Freelance Dashboard
         </h1>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full md:w-auto">
           <CSVImporter />
           <AddDataDialog
             clientsData={activeClients}
             projectsData={activeProjects}
             servicesData={activeServices}
           />
-          <div className="mx-2 bg-border w-[1px] h-8" />
+          <div className="hidden sm:block mx-2 bg-border w-[1px] h-8" />
           <DateRangePicker />
         </div>
       </div>
@@ -139,8 +149,8 @@ export default async function DashboardPage({
       <ActiveFilters clients={allClients} projects={allProjects} />
 
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList className="flex justify-between bg-transparent p-0 w-full h-auto">
-          <div className="flex bg-muted p-1 rounded-md">
+        <TabsList className="flex flex-col md:flex-row justify-between bg-transparent p-0 w-full h-auto gap-4 md:gap-0">
+          <div className="flex bg-muted p-1 rounded-md overflow-x-auto w-full md:w-auto whitespace-nowrap">
             <TabsTrigger value="overview">Dashboard</TabsTrigger>
             <TabsTrigger value="transactions">Movimientos</TabsTrigger>
             <TabsTrigger value="projects">Proyectos</TabsTrigger>
@@ -148,7 +158,7 @@ export default async function DashboardPage({
             <TabsTrigger value="maintenance">Mantenimientos</TabsTrigger>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 w-full md:w-auto overflow-x-auto whitespace-nowrap">
             <ClientsDatabaseDialog clients={allClients} />
             <FiltersDialog clients={allClients} projects={allProjects} />
           </div>
@@ -168,12 +178,17 @@ export default async function DashboardPage({
         </TabsContent>
 
         <TabsContent value="projects">
-          <ProjectsTab />
+          <ProjectsTab projects={allProjects} clients={allClients} />
         </TabsContent>
 
         <TabsContent value="salary">
           {/* IMPORTANT: Passing display dates (Noon) prevents the December 2025 bug */}
-          <SalaryTab from={displayFrom} to={displayTo} />
+          <SalaryTab
+            from={displayFrom}
+            to={displayTo}
+            transactions={allTransactions}
+            services={allServices}
+          />
         </TabsContent>
 
         <TabsContent value="maintenance">
@@ -181,6 +196,8 @@ export default async function DashboardPage({
             from={displayFrom}
             to={displayTo}
             clients={allClients}
+            transactions={allTransactions}
+            services={allServices}
           />
         </TabsContent>
       </Tabs>

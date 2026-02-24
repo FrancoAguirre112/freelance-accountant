@@ -53,11 +53,9 @@ interface MaintenanceService {
 export function MaintenanceRowActions({
   service,
   clients,
-  onUpdate,
 }: {
   service: MaintenanceService;
   clients: Client[];
-  onUpdate: () => void;
 }) {
   const [isEditOpen, setIsEditOpen] = React.useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = React.useState(false);
@@ -67,7 +65,6 @@ export function MaintenanceRowActions({
     const res = await deleteRecurringServiceAction(service.serviceId);
     if (res.success) {
       toast.success("Servicio eliminado correctamente");
-      onUpdate(); // Recargar datos
     } else {
       toast.error("Error al eliminar");
     }
@@ -87,7 +84,6 @@ export function MaintenanceRowActions({
     if (res.success) {
       toast.success("Servicio actualizado");
       setIsEditOpen(false);
-      onUpdate(); // Recargar datos
     } else {
       toast.error("Error al actualizar");
     }

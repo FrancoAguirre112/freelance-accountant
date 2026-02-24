@@ -43,7 +43,7 @@ export function RecurringServiceCombobox({
     <div className="flex flex-col w-full">
       <input type="hidden" name={name} value={value} required={required} />
 
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover open={open} onOpenChange={setOpen} modal={true}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
