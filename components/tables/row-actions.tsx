@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MoreHorizontal, Pencil, Trash } from "lucide-react";
+import { MoreHorizontal, Pencil, RefreshCw, Trash } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,6 +34,7 @@ import {
   updateTransactionAction,
   updateProjectAction,
   updateRecurringServiceAction,
+  createRecurringServiceAction,
 } from "@/app/actions";
 import { type InferSelectModel } from "drizzle-orm";
 import {
@@ -69,6 +70,7 @@ type RowActionsProps =
 
 export function RowActions({ row, type, clients, projects }: RowActionsProps) {
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isConvertOpen, setIsConvertOpen] = useState(false);
 
   const handleDelete = async () => {
     if (!confirm("¿Estás seguro de que quieres eliminar esto?")) return;
@@ -117,6 +119,33 @@ export function RowActions({ row, type, clients, projects }: RowActionsProps) {
     }
   };
 
+  const handleConvert = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (type !== "project") return;
+
+    const formData = new FormData(e.currentTarget);
+    const client = clients?.find((c) => c.id === row.clientId);
+
+    if (!client) {
+      toast.error("Error al identificar el cliente");
+      return;
+    }
+
+    const res = await createRecurringServiceAction({
+      name: formData.get("name") as string,
+      clientName: client.name,
+      amount: parseFloat(formData.get("amount") as string),
+      type: "maintenance",
+    });
+
+    if (res.success) {
+      toast.success("Mantenimiento creado con éxito");
+      setIsConvertOpen(false);
+    } else {
+      toast.error("Error al crear el mantenimiento");
+    }
+  };
+
   return (
     <>
       <DropdownMenu>
@@ -130,6 +159,14 @@ export function RowActions({ row, type, clients, projects }: RowActionsProps) {
           <DropdownMenuItem onClick={() => setIsEditOpen(true)}>
             <Pencil className="mr-2 w-4 h-4" /> Editar
           </DropdownMenuItem>
+          {type === "project" && row.status === "finalizado" && (
+            <DropdownMenuItem
+              onClick={() => setIsConvertOpen(true)}
+              className="text-blue-600 focus:text-blue-600"
+            >
+              <RefreshCw className="mr-2 w-4 h-4" /> Convertir a Mantenimiento
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onClick={handleDelete} className="text-red-600">
             <Trash className="mr-2 w-4 h-4" /> Eliminar
           </DropdownMenuItem>
@@ -271,6 +308,40 @@ export function RowActions({ row, type, clients, projects }: RowActionsProps) {
 
             <Button type="submit" className="w-full">
               Guardar Cambios
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={isConvertOpen} onOpenChange={setIsConvertOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Convertir a Mantenimiento</DialogTitle>
+          </DialogHeader>
+          <p className="text-muted-foreground text-sm">
+            Se creará un nuevo servicio de mantenimiento recurrente para este
+            cliente.
+          </p>
+          <form onSubmit={handleConvert} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nombre del Servicio</Label>
+              <Input
+                name="name"
+                defaultValue={type === "project" ? row.name : ""}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Abono Mensual (USD)</Label>
+              <Input
+                name="amount"
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                required
+              />
+            </div>
+            <Button type="submit" className="w-full">
+              Activar Mantenimiento
             </Button>
           </form>
         </DialogContent>
