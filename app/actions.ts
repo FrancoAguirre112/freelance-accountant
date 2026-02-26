@@ -104,16 +104,14 @@ export async function deleteClientAction(id: number) {
 
 export async function createProjectAction(data: {
   name: string;
-  clientName: string;
+  clientId: number;
   totalAmount: number;
   status: string;
 }) {
   try {
-    const clientId = await findOrCreateClient(data.clientName);
-
     await db.insert(projects).values({
       name: data.name,
-      clientId: clientId,
+      clientId: data.clientId,
       totalAmount: data.totalAmount,
       status: data.status,
     });

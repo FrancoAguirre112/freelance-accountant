@@ -94,7 +94,7 @@ export function AddDataDialog({
 
     const res = await createProjectAction({
       name: formData.get("name") as string,
-      clientName: formData.get("clientName") as string,
+      clientId: parseInt(formData.get("clientName") as string),
       totalAmount: parseFloat(formData.get("totalAmount") as string),
       status: "en_desarrollo",
     });
