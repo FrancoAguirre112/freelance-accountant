@@ -47,10 +47,6 @@ export function FiltersDialog({ clients, projects }: FiltersDialogProps) {
   const [category, setCategory] = React.useState(
     searchParams.get("category") || "all",
   );
-  const [recurrenceType, setRecurrenceType] = React.useState(
-    searchParams.get("type") || "all",
-  );
-
   const handleApply = () => {
     const params = new URLSearchParams(searchParams.toString());
 
@@ -63,10 +59,6 @@ export function FiltersDialog({ clients, projects }: FiltersDialogProps) {
     if (category && category !== "all") params.set("category", category);
     else params.delete("category");
 
-    if (recurrenceType && recurrenceType !== "all")
-      params.set("type", recurrenceType);
-    else params.delete("type");
-
     router.push(`/?${params.toString()}`);
     setOpen(false);
   };
@@ -75,7 +67,6 @@ export function FiltersDialog({ clients, projects }: FiltersDialogProps) {
     setClientId("all");
     setProjectId("all");
     setCategory("all");
-    setRecurrenceType("all");
   };
 
   return (
@@ -128,26 +119,12 @@ export function FiltersDialog({ clients, projects }: FiltersDialogProps) {
               <SelectContent>
                 <SelectItem value="all">Todas</SelectItem>
                 <SelectItem value="project">Proyecto</SelectItem>
-                <SelectItem value="salary">Sueldo</SelectItem>
-                <SelectItem value="maintenance">Mantenimiento</SelectItem>
+                <SelectItem value="recurring">Recurrente</SelectItem>
                 <SelectItem value="other">Otro</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          <div className="space-y-2 col-span-1">
-            <Label>Tipo Recurrencia</Label>
-            <Select value={recurrenceType} onValueChange={setRecurrenceType}>
-              <SelectTrigger>
-                <SelectValue placeholder="Todos" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="maintenance">Mantenimiento</SelectItem>
-                <SelectItem value="salary">Sueldo</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
         </div>
         <DialogFooter className="flex justify-between sm:justify-between w-full">
           <Button variant="ghost" onClick={handleClear}>

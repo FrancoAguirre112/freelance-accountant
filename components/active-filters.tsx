@@ -35,25 +35,17 @@ export function ActiveFilters({ clients, projects }: ActiveFiltersProps) {
         // Traducir valores técnicos a español visual
         const catMap: Record<string, string> = {
           project: "Proyecto",
-          salary: "Sueldo",
-          maintenance: "Mantenimiento",
+          recurring: "Recurrente",
           other: "Otro",
         };
         return `Categoría: ${catMap[value] || value}`;
-
-      case "type":
-        const typeMap: Record<string, string> = {
-          maintenance: "Mantenimiento",
-          salary: "Sueldo",
-        };
-        return `Tipo: ${typeMap[value] || value}`;
 
       default:
         return `${key}: ${value}`;
     }
   };
 
-  const filterKeys = ["clientId", "projectId", "category", "type"];
+  const filterKeys = ["clientId", "projectId", "category"];
 
   // Generamos la lista de filtros activos con sus etiquetas legibles
   const activeFilters = filterKeys

@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install next-auth@beta @auth/drizzle-adapter)",
+      "Bash(npm install next-auth@beta @auth/drizzle-adapter --legacy-peer-deps)",
+      "Bash(npm config get registry)",
+      "Bash(npm config list)",
+      "Bash(pnpm add next-auth@beta @auth/drizzle-adapter)",
+      "Bash(pnpm ls next-auth @auth/drizzle-adapter)",
+      "Bash(pnpm install)",
+      "Bash(test -f C:/Trabajo/Proyectos/freelance-dashboard/components/salary-tab.tsx)",
+      "Bash(npx next build)",
+      "Bash(node -e \"console.log\\(require\\(''crypto''\\).randomBytes\\(32\\).toString\\(''hex''\\)\\)\")",
+      "Bash(npx drizzle-kit push)",
+      "Bash(npx drizzle-kit push --force)",
+      "Bash(npx tsx scripts/assign-data-to-user.ts)",
+      "Bash(npx tsx scripts/merge-recurring-types.ts)",
+      "Bash(npx tsc --noEmit)"
+    ]
+  }
+}

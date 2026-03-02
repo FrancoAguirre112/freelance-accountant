@@ -66,7 +66,7 @@ export function ProjectsTab({
         </div>
       </div>
 
-      <div className="bg-white border rounded-md">
+      <div className="bg-card border rounded-md">
         <Table>
           <TableHeader>
             <TableRow>
@@ -89,14 +89,14 @@ export function ProjectsTab({
 
               // Lógica de estados
               let statusLabel = "Esperando Pago";
-              let statusColor = "bg-red-100 text-red-700 border-red-200";
+              let statusColor = "bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800";
 
               if (totalPaid >= project.totalAmount) {
                 statusLabel = "Pagado Total";
-                statusColor = "bg-green-100 text-green-700 border-green-200";
+                statusColor = "bg-green-100 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800";
               } else if (totalPaid > 0) {
                 statusLabel = "Falta Saldo";
-                statusColor = "bg-yellow-100 text-yellow-700 border-yellow-200";
+                statusColor = "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-950 dark:text-yellow-300 dark:border-yellow-800";
               }
 
               return (
@@ -114,9 +114,9 @@ export function ProjectsTab({
                     ${totalPaid.toLocaleString()}
                   </TableCell>
                   <TableCell className="w-[200px]">
-                    <div className="flex flex-col gap-1">
-                      <Progress value={progressPercentage} className="h-2" />
-                      <span className="text-[10px] text-muted-foreground text-right">
+                    <div className="flex items-center gap-2">
+                      <Progress value={progressPercentage} className="h-2 flex-1" />
+                      <span className="text-[10px] text-muted-foreground w-8 text-right">
                         {progressPercentage.toFixed(0)}%
                       </span>
                     </div>

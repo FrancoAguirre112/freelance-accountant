@@ -30,14 +30,13 @@ import { type InferSelectModel } from "drizzle-orm";
 
 // 1. Tipado base de la base de datos
 type Transaction = InferSelectModel<typeof transactions>;
-type CategoryKey = "project" | "salary" | "maintenance" | "other";
+type CategoryKey = "project" | "recurring" | "other";
 
 // 2. Interfaces para los datos de los gráficos
 interface BarDataRow {
   month: string;
   project: number;
-  maintenance: number;
-  salary: number;
+  recurring: number;
   other: number;
 }
 
@@ -48,9 +47,8 @@ interface PieDataRow {
 }
 
 const chartConfig = {
-  maintenance: { label: "Mantenimiento", color: "#7E57C2" }, // Violeta
   project: { label: "Proyecto", color: "#4285F4" }, // Azul
-  salary: { label: "Sueldo Fijo", color: "#0F9D58" }, // Verde
+  recurring: { label: "Recurrente", color: "#7E57C2" }, // Violeta
   other: { label: "Otro", color: "#9AA0A6" }, // Gris
 } satisfies ChartConfig;
 
@@ -66,8 +64,7 @@ export function DashboardTab({ data }: { data: Transaction[] }) {
         monthsMap[monthName] = {
           month: monthName,
           project: 0,
-          maintenance: 0,
-          salary: 0,
+          recurring: 0,
           other: 0,
         };
       }
@@ -88,8 +85,7 @@ export function DashboardTab({ data }: { data: Transaction[] }) {
   const pieData = useMemo<PieDataRow[]>(() => {
     const totals: Record<CategoryKey, number> = {
       project: 0,
-      maintenance: 0,
-      salary: 0,
+      recurring: 0,
       other: 0,
     };
 
@@ -107,11 +103,10 @@ export function DashboardTab({ data }: { data: Transaction[] }) {
         fill: chartConfig.project.color,
       },
       {
-        name: "Mantenimiento",
-        value: totals.maintenance,
-        fill: chartConfig.maintenance.color,
+        name: "Recurrente",
+        value: totals.recurring,
+        fill: chartConfig.recurring.color,
       },
-      { name: "Sueldo", value: totals.salary, fill: chartConfig.salary.color },
       { name: "Otros", value: totals.other, fill: chartConfig.other.color },
     ].filter((item) => item.value > 0);
   }, [data]);
@@ -137,13 +132,8 @@ export function DashboardTab({ data }: { data: Transaction[] }) {
                 stackId="a"
               />
               <Bar
-                dataKey="maintenance"
-                fill={chartConfig.maintenance.color}
-                stackId="a"
-              />
-              <Bar
-                dataKey="salary"
-                fill={chartConfig.salary.color}
+                dataKey="recurring"
+                fill={chartConfig.recurring.color}
                 stackId="a"
               />
               <Bar

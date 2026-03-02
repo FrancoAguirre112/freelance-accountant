@@ -38,7 +38,7 @@ export function CSVImporter() {
       "TipoDato,Nombre,Vinculo,Monto,Fecha,FechaImputada,Categoria,Concepto,Estado",
       "cliente,Mermoz,,,,,,,",
       "proyecto,Web Mermoz,Mermoz,1500.00,,,,,en_desarrollo",
-      "recurrente,Mantenimiento Mensual,Mermoz,50.00,,,,,maintenance",
+      "recurrente,Mantenimiento Mensual,Mermoz,50.00,,,,,",
       "movimiento,Web Mermoz,,500.00,2024-03-01,2024-03-01,project,Pago Hito 1,",
       "movimiento,,,100.00,2024-03-05,,other,Gasto vario,",
     ].join("\n");
@@ -117,7 +117,7 @@ export function CSVImporter() {
                   name,
                   clientName: link,
                   amount,
-                  type: (row.Categoria || "maintenance") as string,
+                  type: "recurring",
                 });
               }
               break;

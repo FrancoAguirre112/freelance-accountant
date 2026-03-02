@@ -29,7 +29,7 @@ interface TransactionWithRelations extends TransactionModel {
   } | null;
 }
 
-type TransactionCategory = "project" | "salary" | "maintenance" | "other";
+type TransactionCategory = "project" | "recurring" | "other";
 
 export async function TransactionsTab({
   from,
@@ -59,10 +59,15 @@ export async function TransactionsTab({
   }
 
   const categoryColors: Record<TransactionCategory, string> = {
-    maintenance: "bg-purple-100 text-purple-700 border-purple-200",
-    project: "bg-blue-100 text-blue-700 border-blue-200",
-    salary: "bg-green-100 text-green-700 border-green-200",
-    other: "bg-gray-100 text-gray-700 border-gray-200",
+    project: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800",
+    recurring: "bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800",
+    other: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700",
+  };
+
+  const categoryLabels: Record<TransactionCategory, string> = {
+    project: "Proyecto",
+    recurring: "Recurrente",
+    other: "Otro",
   };
 
   return (
@@ -71,7 +76,7 @@ export async function TransactionsTab({
         <h2 className="font-semibold text-xl">Historial de Movimientos</h2>
       </div>
 
-      <div className="bg-white border rounded-md">
+      <div className="bg-card border rounded-md">
         <Table>
           <TableHeader>
             <TableRow>
@@ -129,7 +134,7 @@ export async function TransactionsTab({
                           categoryColors.other
                         }
                       >
-                        {t.category}
+                        {categoryLabels[t.category as TransactionCategory] || t.category}
                       </Badge>
                     </TableCell>
                     <TableCell className="font-medium text-muted-foreground">

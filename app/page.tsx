@@ -1,13 +1,14 @@
+import { auth } from "@/auth";
 import { DashboardTab } from "@/components/dashboard-tab";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { TransactionsTab } from "@/components/transactions-tab";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { UserMenu } from "@/components/user-menu";
 import { db } from "@/db";
-import { transactions } from "@/db/schema";
-import { between, desc } from "drizzle-orm";
+import { clients, projects, recurringServices, transactions } from "@/db/schema";
+import { eq, and, between, desc } from "drizzle-orm";
 import { startOfMonth, endOfMonth } from "date-fns";
 import { ProjectsTab } from "@/components/projects-tab";
-import { SalaryTab } from "@/components/salary-tab";
 import { MaintenanceTab } from "@/components/maintenance-tab";
 import { AddDataDialog } from "@/components/add-data-dialog";
 import { CSVImporter } from "@/components/csv-importer";
@@ -15,7 +16,8 @@ import { ClientsDatabaseDialog } from "@/components/clients-database-dialog";
 import { ActiveFilters } from "@/components/active-filters";
 import { FiltersDialog } from "@/components/filters-dialog";
 import Image from "next/image";
-import { Montserrat } from "next/font/google"; // <-- 1. Import the font
+import { Montserrat } from "next/font/google";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 // 2. Initialize Montserrat with the 'Black' weight (900)
 const montserrat = Montserrat({ 
@@ -34,20 +36,26 @@ export default async function DashboardPage({
     clientId?: string;
     projectId?: string;
     category?: string;
-    type?: string;
   }>;
 }) {
   const params = await searchParams;
 
+  const session = await auth();
+  const userId = session!.user.id;
+
   const [allClients, allProjects, allServices] = await Promise.all([
-    db.query.clients.findMany(),
+    db.query.clients.findMany({
+      where: eq(clients.userId, userId),
+    }),
     db.query.projects.findMany({
+      where: eq(projects.userId, userId),
       with: {
         client: true,
         transactions: true,
       },
     }),
     db.query.recurringServices.findMany({
+      where: eq(recurringServices.userId, userId),
       with: {
         client: true,
       },
@@ -82,7 +90,10 @@ export default async function DashboardPage({
 
   // 3. FETCH TRANSACTIONS (Using QUERY dates)
   const rawTransactions = await db.query.transactions.findMany({
-    where: between(transactions.date, queryFrom, queryTo),
+    where: and(
+      eq(transactions.userId, userId),
+      between(transactions.date, queryFrom, queryTo),
+    ),
     with: {
       project: { with: { client: true } },
       service: { with: { client: true } },
@@ -128,14 +139,6 @@ export default async function DashboardPage({
     );
   }
 
-  if (params.type) {
-    allTransactions = allTransactions.filter((t) => {
-      if (t.category === params.type) return true;
-      if (t.service?.type === params.type) return true;
-      return false;
-    });
-  }
-
   return (
     <div className="flex flex-col gap-8 p-4 md:p-8 overflow-hidden w-full">
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
@@ -163,6 +166,9 @@ export default async function DashboardPage({
           />
           <div className="hidden sm:block mx-2 bg-border w-[1px] h-8" />
           <DateRangePicker />
+          <div className="hidden sm:block mx-2 bg-border w-[1px] h-8" />
+          <ThemeToggle />
+          <UserMenu />
         </div>
       </div>
 
@@ -174,8 +180,7 @@ export default async function DashboardPage({
             <TabsTrigger value="overview">Dashboard</TabsTrigger>
             <TabsTrigger value="transactions">Movimientos</TabsTrigger>
             <TabsTrigger value="projects">Proyectos</TabsTrigger>
-            <TabsTrigger value="salary">Sueldos (RTN)</TabsTrigger>
-            <TabsTrigger value="maintenance">Mantenimientos</TabsTrigger>
+            <TabsTrigger value="maintenance">Servicios Recurrentes</TabsTrigger>
           </div>
 
           <div className="flex gap-2 w-full md:w-auto overflow-x-auto whitespace-nowrap">
@@ -199,16 +204,6 @@ export default async function DashboardPage({
 
         <TabsContent value="projects">
           <ProjectsTab projects={allProjects} clients={allClients} />
-        </TabsContent>
-
-        <TabsContent value="salary">
-          {/* IMPORTANT: Passing display dates (Noon) prevents the December 2025 bug */}
-          <SalaryTab
-            from={displayFrom}
-            to={displayTo}
-            transactions={allTransactions}
-            services={allServices}
-          />
         </TabsContent>
 
         <TabsContent value="maintenance">

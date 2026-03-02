@@ -49,7 +49,7 @@ type Transaction = InferSelectModel<typeof transactions>;
 type Project = InferSelectModel<typeof projects>;
 type RecurringService = InferSelectModel<typeof recurringServices>;
 type Client = InferSelectModel<typeof clients>;
-type TransactionCategory = "project" | "salary" | "maintenance" | "other";
+type TransactionCategory = "project" | "recurring" | "other";
 
 // 2. Creamos una unión discriminada para los props
 // Esto le dice a TS: "Si type es 'transaction', row TIENE que ser una Transaction"
@@ -135,14 +135,13 @@ export function RowActions({ row, type, clients, projects }: RowActionsProps) {
       name: formData.get("name") as string,
       clientName: client.name,
       amount: parseFloat(formData.get("amount") as string),
-      type: "maintenance",
     });
 
     if (res.success) {
-      toast.success("Mantenimiento creado con éxito");
+      toast.success("Servicio recurrente creado con éxito");
       setIsConvertOpen(false);
     } else {
-      toast.error("Error al crear el mantenimiento");
+      toast.error("Error al crear el servicio recurrente");
     }
   };
 
@@ -164,7 +163,7 @@ export function RowActions({ row, type, clients, projects }: RowActionsProps) {
               onClick={() => setIsConvertOpen(true)}
               className="text-blue-600 focus:text-blue-600"
             >
-              <RefreshCw className="mr-2 w-4 h-4" /> Convertir a Mantenimiento
+              <RefreshCw className="mr-2 w-4 h-4" /> Convertir a Recurrente
             </DropdownMenuItem>
           )}
           <DropdownMenuItem onClick={handleDelete} className="text-red-600">
@@ -223,8 +222,7 @@ export function RowActions({ row, type, clients, projects }: RowActionsProps) {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="project">Proyecto</SelectItem>
-                      <SelectItem value="salary">Sueldo</SelectItem>
-                      <SelectItem value="maintenance">Mantenimiento</SelectItem>
+                      <SelectItem value="recurring">Recurrente</SelectItem>
                       <SelectItem value="other">Otro</SelectItem>
                     </SelectContent>
                   </Select>
@@ -315,11 +313,10 @@ export function RowActions({ row, type, clients, projects }: RowActionsProps) {
       <Dialog open={isConvertOpen} onOpenChange={setIsConvertOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Convertir a Mantenimiento</DialogTitle>
+            <DialogTitle>Convertir a Recurrente</DialogTitle>
           </DialogHeader>
           <p className="text-muted-foreground text-sm">
-            Se creará un nuevo servicio de mantenimiento recurrente para este
-            cliente.
+            Se creará un nuevo servicio recurrente para este cliente.
           </p>
           <form onSubmit={handleConvert} className="space-y-4">
             <div className="space-y-2">
@@ -341,7 +338,7 @@ export function RowActions({ row, type, clients, projects }: RowActionsProps) {
               />
             </div>
             <Button type="submit" className="w-full">
-              Activar Mantenimiento
+              Activar Recurrencia
             </Button>
           </form>
         </DialogContent>

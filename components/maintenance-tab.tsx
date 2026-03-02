@@ -19,7 +19,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { getMaintenanceCoverageAction } from "@/app/actions";
 import { getSafeMonthsInRange } from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
 import { MaintenanceRowActions } from "@/components/maintenance-row-actions";
@@ -55,11 +54,11 @@ export function MaintenanceTab({
     setExpandedRows((p) => ({ ...p, [id]: !p[id] }));
 
   // Synchronous calculation
-  const maintenanceServices = services.filter((s) => s.type === "maintenance");
+  const maintenanceServices = services; // Show all recurring services (maintenance + salary)
   
   const relatedTransactions = transactions.filter(
     (t) =>
-      t.category === "maintenance" &&
+      t.category === "recurring" &&
       t.date >= new Date(from.setUTCHours(0, 0, 0, 0)) &&
       t.date <= new Date(to.setUTCHours(23, 59, 59, 999))
   );
@@ -137,10 +136,10 @@ export function MaintenanceTab({
         </Card>
       </div>
 
-      <div className="bg-white border rounded-md overflow-hidden">
+      <div className="bg-card border rounded-md overflow-hidden">
         <Table>
           <TableHeader>
-            <TableRow className="bg-gray-50/50">
+            <TableRow className="bg-muted/50">
               <TableHead className="w-[50px]"></TableHead>
               <TableHead>Cliente / Servicio</TableHead>
               <TableHead>Abono Mensual</TableHead>
@@ -157,7 +156,7 @@ export function MaintenanceTab({
                   colSpan={6}
                   className="py-8 text-muted-foreground text-center"
                 >
-                  No hay servicios de mantenimiento activos.
+                  No hay servicios recurrentes activos.
                 </TableCell>
               </TableRow>
             ) : (
@@ -248,15 +247,15 @@ export function MaintenanceTab({
                                   className={cn(
                                     "flex flex-col items-center p-3 border rounded-md text-sm text-center transition-all",
                                     d.isCovered
-                                      ? "bg-green-50 border-green-200"
-                                      : "bg-white border-gray-200",
+                                      ? "bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800"
+                                      : "bg-card border-border",
                                   )}
                                 >
                                   <span className="mb-1 font-medium">
                                     {d.label}
                                   </span>
                                   {d.isCovered ? (
-                                    <span className="font-bold text-green-700 text-xs">
+                                    <span className="font-bold text-green-700 dark:text-green-400 text-xs">
                                       Pagado
                                     </span>
                                   ) : (

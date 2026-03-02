@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,7 +37,7 @@ import { clients, projects, recurringServices } from "@/db/schema";
 type Client = InferSelectModel<typeof clients>;
 type Project = InferSelectModel<typeof projects>;
 type RecurringService = InferSelectModel<typeof recurringServices>;
-type TransactionCategory = "project" | "salary" | "maintenance" | "other";
+type TransactionCategory = "project" | "recurring" | "other";
 
 export function AddDataDialog({
   clientsData,
@@ -51,91 +51,108 @@ export function AddDataDialog({
   const [open, setOpen] = React.useState(false);
   const [selectedCategory, setSelectedCategory] =
     React.useState<TransactionCategory>("project");
+  const [loading, setLoading] = React.useState(false);
 
   // --- MANEJADORES DE SUBMIT (Modo Continuo) ---
 
   async function handleTransactionSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const form = e.currentTarget; // Guardamos referencia al form
+    setLoading(true);
+    const form = e.currentTarget;
     const formData = new FormData(form);
 
-    const res = await createTransactionAction({
-      date: new Date(formData.get("date") as string + "T12:00:00Z"),
-      imputedDate: formData.get("imputedDate")
-        ? new Date(formData.get("imputedDate") as string + "T12:00:00Z")
-        : new Date(formData.get("date") as string + "T12:00:00Z"),
-      amount: parseFloat(formData.get("amount") as string),
-      category: formData.get("category") as TransactionCategory,
-      description: formData.get("description") as string,
-      projectId: formData.get("projectId")
-        ? Number(formData.get("projectId"))
-        : null,
-      serviceId: formData.get("serviceId")
-        ? Number(formData.get("serviceId"))
-        : null,
-      status: "paid",
-    });
-
-    if (res.success) {
-      toast.success("Transacción guardada", {
-        description: "Puedes seguir agregando más.",
+    try {
+      const res = await createTransactionAction({
+        date: new Date(formData.get("date") as string + "T12:00:00Z"),
+        imputedDate: formData.get("imputedDate")
+          ? new Date(formData.get("imputedDate") as string + "T12:00:00Z")
+          : new Date(formData.get("date") as string + "T12:00:00Z"),
+        amount: parseFloat(formData.get("amount") as string),
+        category: formData.get("category") as TransactionCategory,
+        description: formData.get("description") as string,
+        projectId: formData.get("projectId")
+          ? Number(formData.get("projectId"))
+          : null,
+        serviceId: formData.get("serviceId")
+          ? Number(formData.get("serviceId"))
+          : null,
+        status: "paid",
       });
-      // Reseteamos los inputs de texto (Monto, Descripción, Fecha)
-      // Nota: Los Comboboxes de React mantendrán su estado, lo cual es útil para cargas masivas del mismo proyecto.
-      form.reset();
-      // NO cerramos el modal: setOpen(false) eliminado.
+
+      if (res.success) {
+        toast.success("Transacción guardada", {
+          description: "Puedes seguir agregando más.",
+        });
+        form.reset();
+      }
+    } finally {
+      setLoading(false);
     }
   }
 
   async function handleProjectSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setLoading(true);
     const form = e.currentTarget;
     const formData = new FormData(form);
 
-    const res = await createProjectAction({
-      name: formData.get("name") as string,
-      clientId: parseInt(formData.get("clientName") as string),
-      totalAmount: parseFloat(formData.get("totalAmount") as string),
-      status: "en_desarrollo",
-    });
+    try {
+      const res = await createProjectAction({
+        name: formData.get("name") as string,
+        clientId: parseInt(formData.get("clientName") as string),
+        totalAmount: parseFloat(formData.get("totalAmount") as string),
+        status: "en_desarrollo",
+      });
 
-    if (res.success) {
-      toast.success("Proyecto creado exitosamente");
-      form.reset();
+      if (res.success) {
+        toast.success("Proyecto creado exitosamente");
+        form.reset();
+      }
+    } finally {
+      setLoading(false);
     }
   }
 
   async function handleClientSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setLoading(true);
     const form = e.currentTarget;
     const formData = new FormData(form);
 
-    const res = await createClientAction({
-      name: formData.get("name") as string,
-      status: "active",
-    });
+    try {
+      const res = await createClientAction({
+        name: formData.get("name") as string,
+        status: "active",
+      });
 
-    if (res.success) {
-      toast.success("Cliente agregado");
-      form.reset();
+      if (res.success) {
+        toast.success("Cliente agregado");
+        form.reset();
+      }
+    } finally {
+      setLoading(false);
     }
   }
 
   async function handleRecurringSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setLoading(true);
     const form = e.currentTarget;
     const formData = new FormData(form);
 
-    const res = await createRecurringServiceAction({
-      name: formData.get("name") as string,
-      clientName: formData.get("clientName") as string,
-      amount: parseFloat(formData.get("amount") as string),
-      type: formData.get("type") as "maintenance" | "salary",
-    });
+    try {
+      const res = await createRecurringServiceAction({
+        name: formData.get("name") as string,
+        clientName: formData.get("clientName") as string,
+        amount: parseFloat(formData.get("amount") as string),
+      });
 
-    if (res.success) {
-      toast.success("Servicio recurrente configurado");
-      form.reset();
+      if (res.success) {
+        toast.success("Servicio recurrente configurado");
+        form.reset();
+      }
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -204,10 +221,9 @@ export function AddDataDialog({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="project">Proyecto (Azul)</SelectItem>
-                    <SelectItem value="maintenance">
-                      Mantenimiento (Violeta)
+                    <SelectItem value="recurring">
+                      Recurrente (Violeta)
                     </SelectItem>
-                    <SelectItem value="salary">Sueldo / RTN (Verde)</SelectItem>
                     <SelectItem value="other">Otro (Gris)</SelectItem>
                   </SelectContent>
                 </Select>
@@ -222,8 +238,7 @@ export function AddDataDialog({
                 </div>
               )}
 
-              {(selectedCategory === "maintenance" ||
-                selectedCategory === "salary") && (
+              {selectedCategory === "recurring" && (
                 <div className="space-y-2 slide-in-from-top-1 animate-in fade-in">
                   <Label>Vincular a Servicio Recurrente</Label>
                   <RecurringServiceCombobox
@@ -247,8 +262,8 @@ export function AddDataDialog({
               </div>
 
               <div className="flex gap-2">
-                <Button type="submit" className="flex-1">
-                  Guardar y Seguir
+                <Button type="submit" className="flex-1" disabled={loading}>
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Guardar y Seguir"}
                 </Button>
                 {/* Botón opcional para cerrar manualmente si se desea */}
                 <Button
@@ -287,8 +302,8 @@ export function AddDataDialog({
                 <Label>Presupuesto Total (USD)</Label>
                 <Input name="totalAmount" type="number" step="0.01" required />
               </div>
-              <Button type="submit" className="w-full">
-                Crear Proyecto
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Crear Proyecto"}
               </Button>
             </form>
           </TabsContent>
@@ -300,8 +315,8 @@ export function AddDataDialog({
                 <Label>Nombre del Cliente / Empresa</Label>
                 <Input name="name" placeholder="Ej: Mermoz SAS" required />
               </div>
-              <Button type="submit" className="w-full">
-                Guardar Cliente
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Guardar Cliente"}
               </Button>
             </form>
           </TabsContent>
@@ -318,21 +333,6 @@ export function AddDataDialog({
                 />
               </div>
               <div className="space-y-2">
-                <Label>Tipo de Recurrencia</Label>
-                <Select name="type" required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="maintenance">
-                      Mantenimiento (Violeta)
-                    </SelectItem>
-                    <SelectItem value="salary">Sueldo / RTN (Verde)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
                 <Label>Cliente</Label>
                 <ClientCombobox
                   clients={clientsData}
@@ -345,8 +345,8 @@ export function AddDataDialog({
                 <Label>Monto Mensual Objetivo (USD)</Label>
                 <Input name="amount" type="number" step="0.01" required />
               </div>
-              <Button type="submit" className="w-full">
-                Configurar Recurrencia
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Configurar Recurrencia"}
               </Button>
             </form>
           </TabsContent>

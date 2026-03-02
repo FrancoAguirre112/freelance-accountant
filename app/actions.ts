@@ -6,25 +6,24 @@ import {
   projects,
   transactions,
   recurringServices,
+  users,
 } from "@/db/schema";
+import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
 import { type InferInsertModel, eq, and, between } from "drizzle-orm";
-import {
-  startOfMonth,
-  endOfMonth,
-  eachMonthOfInterval,
-  isSameMonth,
-  startOfDay,
-  endOfDay,
-} from "date-fns";
 
-type NewTransaction = InferInsertModel<typeof transactions>;
-type TransactionCategory = "project" | "salary" | "maintenance" | "other";
-type RecurringType = "maintenance" | "salary";
+type NewTransaction = Omit<InferInsertModel<typeof transactions>, "userId">;
+type TransactionCategory = "project" | "recurring" | "other";
 
-async function findOrCreateClient(name: string): Promise<number> {
+async function requireUserId(): Promise<string> {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not authenticated");
+  return session.user.id;
+}
+
+async function findOrCreateClient(name: string, userId: string): Promise<number> {
   const existingClient = await db.query.clients.findFirst({
-    where: eq(clients.name, name),
+    where: and(eq(clients.name, name), eq(clients.userId, userId)),
   });
 
   if (existingClient) {
@@ -33,7 +32,7 @@ async function findOrCreateClient(name: string): Promise<number> {
 
   const newClient = await db
     .insert(clients)
-    .values({ name, status: "active" })
+    .values({ name, status: "active", userId })
     .returning({ id: clients.id });
 
   return newClient[0].id;
@@ -41,7 +40,8 @@ async function findOrCreateClient(name: string): Promise<number> {
 
 export async function importTransactionsAction(data: NewTransaction[]) {
   try {
-    await db.insert(transactions).values(data);
+    const userId = await requireUserId();
+    await db.insert(transactions).values(data.map(d => ({ ...d, userId })));
     revalidatePath("/");
     return { success: true };
   } catch (error) {
@@ -53,9 +53,10 @@ export async function importTransactionsAction(data: NewTransaction[]) {
 }
 
 export async function createClientAction(
-  data: InferInsertModel<typeof clients>,
+  data: Omit<InferInsertModel<typeof clients>, "userId">,
 ) {
-  await db.insert(clients).values(data);
+  const userId = await requireUserId();
+  await db.insert(clients).values({ ...data, userId });
   revalidatePath("/");
   return { success: true };
 }
@@ -65,7 +66,8 @@ export async function updateClientAction(
   data: Partial<InferInsertModel<typeof clients>>,
 ) {
   try {
-    await db.update(clients).set(data).where(eq(clients.id, id));
+    const userId = await requireUserId();
+    await db.update(clients).set(data).where(and(eq(clients.id, id), eq(clients.userId, userId)));
     revalidatePath("/");
     return { success: true };
   } catch (error) {
@@ -76,24 +78,25 @@ export async function updateClientAction(
 
 export async function deleteClientAction(id: number) {
   try {
+    const userId = await requireUserId();
     // Check if client has ANY associated projects or recurring services
     const associatedProjects = await db.query.projects.findFirst({
-      where: eq(projects.clientId, id),
+      where: and(eq(projects.clientId, id), eq(projects.userId, userId)),
     });
 
     const associatedServices = await db.query.recurringServices.findFirst({
-      where: eq(recurringServices.clientId, id),
+      where: and(eq(recurringServices.clientId, id), eq(recurringServices.userId, userId)),
     });
 
     if (associatedProjects || associatedServices) {
-      return { 
-        success: false, 
-        error: "No se puede eliminar. El cliente tiene proyectos o servicios vinculados." 
+      return {
+        success: false,
+        error: "No se puede eliminar. El cliente tiene proyectos o servicios vinculados."
       };
     }
 
     // Safe to delete physically
-    await db.delete(clients).where(eq(clients.id, id));
+    await db.delete(clients).where(and(eq(clients.id, id), eq(clients.userId, userId)));
     revalidatePath("/");
     return { success: true };
   } catch (error) {
@@ -109,11 +112,13 @@ export async function createProjectAction(data: {
   status: string;
 }) {
   try {
+    const userId = await requireUserId();
     await db.insert(projects).values({
       name: data.name,
       clientId: data.clientId,
       totalAmount: data.totalAmount,
       status: data.status,
+      userId,
     });
 
     revalidatePath("/");
@@ -125,9 +130,10 @@ export async function createProjectAction(data: {
 }
 
 export async function createTransactionAction(
-  data: InferInsertModel<typeof transactions>,
+  data: Omit<InferInsertModel<typeof transactions>, "userId">,
 ) {
-  await db.insert(transactions).values(data);
+  const userId = await requireUserId();
+  await db.insert(transactions).values({ ...data, userId });
   revalidatePath("/");
   return { success: true };
 }
@@ -136,16 +142,16 @@ export async function createRecurringServiceAction(data: {
   name: string;
   clientName: string;
   amount: number;
-  type: "maintenance" | "salary";
 }) {
   try {
-    const clientId = await findOrCreateClient(data.clientName);
+    const userId = await requireUserId();
+    const clientId = await findOrCreateClient(data.clientName, userId);
 
     await db.insert(recurringServices).values({
       name: data.name,
       clientId: clientId,
       amount: data.amount,
-      type: data.type,
+      userId,
     });
 
     revalidatePath("/");
@@ -182,10 +188,13 @@ type RawImportData = {
 
 export async function bulkSmartImportAction(data: RawImportData) {
   try {
+    const userId = await requireUserId();
     await db.transaction(async (tx) => {
       const clientMap = new Map<string, number>();
 
-      const existingClients = await tx.query.clients.findMany();
+      const existingClients = await tx.query.clients.findMany({
+        where: eq(clients.userId, userId),
+      });
       existingClients.forEach((c) => clientMap.set(c.name.toLowerCase(), c.id));
 
       for (const c of data.clients) {
@@ -193,7 +202,7 @@ export async function bulkSmartImportAction(data: RawImportData) {
         if (!clientMap.has(normalizedName)) {
           const res = await tx
             .insert(clients)
-            .values({ name: c.name, status: "active" })
+            .values({ name: c.name, status: "active", userId })
             .returning({ id: clients.id });
           clientMap.set(normalizedName, res[0].id);
         }
@@ -202,12 +211,16 @@ export async function bulkSmartImportAction(data: RawImportData) {
       const projectMap = new Map<string, number>();
       const serviceMap = new Map<string, number>();
 
-      const existingProjects = await tx.query.projects.findMany();
+      const existingProjects = await tx.query.projects.findMany({
+        where: eq(projects.userId, userId),
+      });
       existingProjects.forEach((p) =>
         projectMap.set(p.name.toLowerCase(), p.id),
       );
 
-      const existingServices = await tx.query.recurringServices.findMany();
+      const existingServices = await tx.query.recurringServices.findMany({
+        where: eq(recurringServices.userId, userId),
+      });
       existingServices.forEach((s) =>
         serviceMap.set(s.name.toLowerCase(), s.id),
       );
@@ -224,6 +237,7 @@ export async function bulkSmartImportAction(data: RawImportData) {
               clientId,
               totalAmount: p.totalAmount,
               status: p.status || "en_desarrollo",
+              userId,
             })
             .returning({ id: projects.id });
           projectMap.set(normalizedProjName, res[0].id);
@@ -241,14 +255,14 @@ export async function bulkSmartImportAction(data: RawImportData) {
               name: r.name,
               clientId,
               amount: r.amount,
-              type: r.type as RecurringType,
+              userId,
             })
             .returning({ id: recurringServices.id });
           serviceMap.set(normalizedServiceName, res[0].id);
         }
       }
 
-      const transactionsToInsert: NewTransaction[] = data.transactions.map(
+      const transactionsToInsert = data.transactions.map(
         (t) => {
           let projectId = null;
           let serviceId = null;
@@ -270,6 +284,7 @@ export async function bulkSmartImportAction(data: RawImportData) {
             projectId: projectId,
             serviceId: serviceId,
             status: "paid",
+            userId,
           };
         },
       );
@@ -291,7 +306,8 @@ export async function updateTransactionAction(
   id: number,
   data: Partial<InferInsertModel<typeof transactions>>,
 ) {
-  await db.update(transactions).set(data).where(eq(transactions.id, id));
+  const userId = await requireUserId();
+  await db.update(transactions).set(data).where(and(eq(transactions.id, id), eq(transactions.userId, userId)));
   revalidatePath("/");
   return { success: true };
 }
@@ -300,7 +316,8 @@ export async function updateProjectAction(
   id: number,
   data: Partial<InferInsertModel<typeof projects>>,
 ) {
-  await db.update(projects).set(data).where(eq(projects.id, id));
+  const userId = await requireUserId();
+  await db.update(projects).set(data).where(and(eq(projects.id, id), eq(projects.userId, userId)));
   revalidatePath("/");
   return { success: true };
 }
@@ -309,17 +326,19 @@ export async function updateRecurringServiceAction(
   id: number,
   data: Partial<InferInsertModel<typeof recurringServices>>,
 ) {
+  const userId = await requireUserId();
   await db
     .update(recurringServices)
     .set(data)
-    .where(eq(recurringServices.id, id));
+    .where(and(eq(recurringServices.id, id), eq(recurringServices.userId, userId)));
   revalidatePath("/");
   return { success: true };
 }
 
 export async function deleteTransactionAction(id: number) {
   try {
-    await db.delete(transactions).where(eq(transactions.id, id));
+    const userId = await requireUserId();
+    await db.delete(transactions).where(and(eq(transactions.id, id), eq(transactions.userId, userId)));
     revalidatePath("/");
     return { success: true };
   } catch (error) {
@@ -330,13 +349,14 @@ export async function deleteTransactionAction(id: number) {
 
 export async function deleteProjectAction(id: number) {
   try {
+    const userId = await requireUserId();
     await db.transaction(async (tx) => {
       await tx
         .update(transactions)
         .set({ projectId: null })
         .where(eq(transactions.projectId, id));
 
-      await tx.delete(projects).where(eq(projects.id, id));
+      await tx.delete(projects).where(and(eq(projects.id, id), eq(projects.userId, userId)));
     });
 
     revalidatePath("/");
@@ -349,13 +369,14 @@ export async function deleteProjectAction(id: number) {
 
 export async function deleteRecurringServiceAction(id: number) {
   try {
+    const userId = await requireUserId();
     await db.transaction(async (tx) => {
       await tx
         .update(transactions)
         .set({ serviceId: null })
         .where(eq(transactions.serviceId, id));
 
-      await tx.delete(recurringServices).where(eq(recurringServices.id, id));
+      await tx.delete(recurringServices).where(and(eq(recurringServices.id, id), eq(recurringServices.userId, userId)));
     });
 
     revalidatePath("/");
@@ -372,80 +393,37 @@ function toNoonUTC(date: Date) {
   return d;
 }
 
-export async function getSalaryCoverageAction(from: Date, to: Date) {
-  // Ensure we query the full days
-  const dbFrom = new Date(from);
-  dbFrom.setUTCHours(0, 0, 0, 0);
-  const dbTo = new Date(to);
-  dbTo.setUTCHours(23, 59, 59, 999);
-
-  const salaryServices = await db.query.recurringServices.findMany({
-    where: eq(recurringServices.type, "salary"),
-  });
-
-  const totalMonthlyTarget = salaryServices.reduce(
-    (sum, s) => sum + s.amount,
-    0,
-  );
-
-  const salaryTransactions = await db.query.transactions.findMany({
-    where: and(
-      eq(transactions.category, "salary"),
-      between(transactions.date, dbFrom, dbTo),
-    ),
-  });
-
-  // Group by STRING KEY "YYYY-MM"
-  // This is timezone-proof because ISO string is standard
-  const coverageMap = new Map<string, number>();
-
-  salaryTransactions.forEach((t) => {
-    // Extract "2026-01" from "2026-01-05T..."
-    const monthKey = t.date.toISOString().slice(0, 7);
-    const currentAmount = coverageMap.get(monthKey) || 0;
-    coverageMap.set(monthKey, currentAmount + t.amount);
-  });
-
-  // Return simple object: { "2026-01": 500, "2026-02": 0 }
-  return {
-    monthlyTarget: totalMonthlyTarget,
-    // Convert Map to plain object
-    data: Object.fromEntries(coverageMap),
-  };
-}
-
-export async function getMaintenanceCoverageAction(from: Date, to: Date) {
+export async function getRecurringCoverageAction(from: Date, to: Date) {
+  const userId = await requireUserId();
   const dbFrom = new Date(from);
   dbFrom.setUTCHours(0, 0, 0, 0);
   const dbTo = new Date(to);
   dbTo.setUTCHours(23, 59, 59, 999);
 
   const services = await db.query.recurringServices.findMany({
-    where: eq(recurringServices.type, "maintenance"),
+    where: eq(recurringServices.userId, userId),
     with: { client: true },
   });
 
   const relatedTransactions = await db.query.transactions.findMany({
     where: and(
-      eq(transactions.category, "maintenance"),
+      eq(transactions.category, "recurring"),
       between(transactions.date, dbFrom, dbTo),
+      eq(transactions.userId, userId),
     ),
   });
 
   const results = services.map((service) => {
-    // Get transactions for this service
     const serviceTrans = relatedTransactions.filter(
       (t) => t.serviceId === service.id,
     );
 
-    // Group payments by month key "YYYY-MM"
     const paymentsByMonth: Record<string, number> = {};
     let totalCollected = 0;
 
     serviceTrans.forEach((t) => {
-      // Use imputedDate if available, otherwise real date
       const dateToUse = t.imputedDate || t.date;
-      const key = dateToUse.toISOString().slice(0, 7); // "2026-01"
+      const key = dateToUse.toISOString().slice(0, 7);
 
       paymentsByMonth[key] = (paymentsByMonth[key] || 0) + t.amount;
       totalCollected += t.amount;
@@ -463,4 +441,19 @@ export async function getMaintenanceCoverageAction(from: Date, to: Date) {
   });
 
   return results;
+}
+
+export async function setProfileTypeAction(
+  profileType: "programador" | "marketing",
+) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not authenticated");
+
+  await db
+    .update(users)
+    .set({ profileType })
+    .where(eq(users.id, session.user.id));
+
+  revalidatePath("/");
+  return { success: true };
 }
