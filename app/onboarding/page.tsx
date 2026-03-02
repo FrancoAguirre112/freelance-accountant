@@ -5,14 +5,17 @@ import { setProfileTypeAction } from "@/app/actions";
 import Image from "next/image";
 import { Montserrat } from "next/font/google";
 import { Code2, Megaphone } from "lucide-react";
+import { useSession } from "next-auth/react";
 
 const montserrat = Montserrat({ subsets: ["latin"], weight: "900" });
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { update } = useSession();
 
   async function selectProfile(type: "programador" | "marketing") {
     await setProfileTypeAction(type);
+    await update({ profileType: type });
     router.push("/");
   }
 
