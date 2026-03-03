@@ -4,6 +4,7 @@ import { db } from "@/db";
 import {
   clients,
   projects,
+  pagos,
   transactions,
   recurringServices,
   users,
@@ -13,7 +14,7 @@ import { revalidatePath } from "next/cache";
 import { type InferInsertModel, eq, and, between } from "drizzle-orm";
 
 type NewTransaction = Omit<InferInsertModel<typeof transactions>, "userId">;
-type TransactionCategory = "project" | "recurring" | "other";
+type TransactionCategory = "project" | "recurring" | "pago" | "other";
 
 async function requireUserId(): Promise<string> {
   const session = await auth();
@@ -56,9 +57,9 @@ export async function createClientAction(
   data: Omit<InferInsertModel<typeof clients>, "userId">,
 ) {
   const userId = await requireUserId();
-  await db.insert(clients).values({ ...data, userId });
+  const result = await db.insert(clients).values({ ...data, userId }).returning({ id: clients.id });
   revalidatePath("/");
-  return { success: true };
+  return { success: true, id: result[0].id };
 }
 
 export async function updateClientAction(
@@ -72,7 +73,7 @@ export async function updateClientAction(
     return { success: true };
   } catch (error) {
     console.error("Error updating client:", error);
-    return { success: false, error: "No se pudo actualizar el cliente" };
+    return { success: false, error: "No se pudo actualizar la entidad" };
   }
 }
 
@@ -91,7 +92,7 @@ export async function deleteClientAction(id: number) {
     if (associatedProjects || associatedServices) {
       return {
         success: false,
-        error: "No se puede eliminar. El cliente tiene proyectos o servicios vinculados."
+        error: "No se puede eliminar. La entidad tiene proyectos o servicios vinculados."
       };
     }
 
@@ -142,6 +143,7 @@ export async function createRecurringServiceAction(data: {
   name: string;
   clientName: string;
   amount: number;
+  type?: "service" | "payment";
 }) {
   try {
     const userId = await requireUserId();
@@ -151,6 +153,31 @@ export async function createRecurringServiceAction(data: {
       name: data.name,
       clientId: clientId,
       amount: data.amount,
+      type: data.type || "service",
+      userId,
+    });
+
+    revalidatePath("/");
+    return { success: true };
+  } catch (error) {
+    console.error(error);
+    return { success: false };
+  }
+}
+
+export async function createRecurringPaymentFromPagoAction(data: {
+  name: string;
+  clientId: number;
+  amount: number;
+}) {
+  try {
+    const userId = await requireUserId();
+
+    await db.insert(recurringServices).values({
+      name: data.name,
+      clientId: data.clientId,
+      amount: data.amount,
+      type: "payment",
       userId,
     });
 
@@ -175,6 +202,12 @@ type RawImportData = {
     clientName: string;
     amount: number;
     type: string;
+  }[];
+  pagos: {
+    name: string;
+    clientName: string;
+    totalAmount: number;
+    status?: string;
   }[];
   transactions: {
     date: Date;
@@ -255,6 +288,7 @@ export async function bulkSmartImportAction(data: RawImportData) {
               name: r.name,
               clientId,
               amount: r.amount,
+              type: r.type === "payment" ? "payment" : "service",
               userId,
             })
             .returning({ id: recurringServices.id });
@@ -262,15 +296,46 @@ export async function bulkSmartImportAction(data: RawImportData) {
         }
       }
 
+      const pagoMap = new Map<string, number>();
+
+      const existingPagos = await tx.query.pagos.findMany({
+        where: eq(pagos.userId, userId),
+      });
+      existingPagos.forEach((p) =>
+        pagoMap.set(p.name.toLowerCase(), p.id),
+      );
+
+      for (const p of data.pagos || []) {
+        const clientId = clientMap.get(p.clientName.toLowerCase());
+        const normalizedPagoName = p.name.toLowerCase();
+
+        if (clientId && !pagoMap.has(normalizedPagoName)) {
+          const res = await tx
+            .insert(pagos)
+            .values({
+              name: p.name,
+              clientId,
+              totalAmount: p.totalAmount,
+              status: p.status || "pendiente",
+              userId,
+            })
+            .returning({ id: pagos.id });
+          pagoMap.set(normalizedPagoName, res[0].id);
+        }
+      }
+
       const transactionsToInsert = data.transactions.map(
         (t) => {
           let projectId = null;
+          let pagoId = null;
           let serviceId = null;
 
           if (t.targetName) {
             const target = t.targetName.toLowerCase();
             if (projectMap.has(target))
               projectId = projectMap.get(target) ?? null;
+            else if (pagoMap.has(target))
+              pagoId = pagoMap.get(target) ?? null;
             else if (serviceMap.has(target))
               serviceId = serviceMap.get(target) ?? null;
           }
@@ -282,6 +347,7 @@ export async function bulkSmartImportAction(data: RawImportData) {
             category: t.category as TransactionCategory,
             description: t.description,
             projectId: projectId,
+            pagoId: pagoId,
             serviceId: serviceId,
             status: "paid",
             userId,
@@ -367,6 +433,58 @@ export async function deleteProjectAction(id: number) {
   }
 }
 
+export async function createPagoAction(data: {
+  name: string;
+  clientId: number;
+  totalAmount: number;
+  status: string;
+}) {
+  try {
+    const userId = await requireUserId();
+    await db.insert(pagos).values({
+      name: data.name,
+      clientId: data.clientId,
+      totalAmount: data.totalAmount,
+      status: data.status,
+      userId,
+    });
+    revalidatePath("/");
+    return { success: true };
+  } catch (error) {
+    console.error(error);
+    return { success: false };
+  }
+}
+
+export async function updatePagoAction(
+  id: number,
+  data: Partial<InferInsertModel<typeof pagos>>,
+) {
+  const userId = await requireUserId();
+  await db.update(pagos).set(data).where(and(eq(pagos.id, id), eq(pagos.userId, userId)));
+  revalidatePath("/");
+  return { success: true };
+}
+
+export async function deletePagoAction(id: number) {
+  try {
+    const userId = await requireUserId();
+    await db.transaction(async (tx) => {
+      await tx
+        .update(transactions)
+        .set({ pagoId: null })
+        .where(eq(transactions.pagoId, id));
+
+      await tx.delete(pagos).where(and(eq(pagos.id, id), eq(pagos.userId, userId)));
+    });
+    revalidatePath("/");
+    return { success: true };
+  } catch (error) {
+    console.error("Error deleting pago:", error);
+    return { success: false, error: "No se pudo eliminar el pago" };
+  }
+}
+
 export async function deleteRecurringServiceAction(id: number) {
   try {
     const userId = await requireUserId();
@@ -433,7 +551,7 @@ export async function getRecurringCoverageAction(from: Date, to: Date) {
       serviceId: service.id,
       serviceName: service.name,
       clientId: service.clientId,
-      clientName: service.client?.name || "Sin Cliente",
+      clientName: service.client?.name || "Sin Entidad",
       monthlyFee: service.amount,
       totalCollected,
       paymentsByMonth,

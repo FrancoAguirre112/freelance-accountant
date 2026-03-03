@@ -30,13 +30,13 @@ import { type InferSelectModel } from "drizzle-orm";
 
 // 1. Tipado base de la base de datos
 type Transaction = InferSelectModel<typeof transactions>;
-type CategoryKey = "project" | "recurring" | "other";
+type CategoryKey = "project" | "recurring" | "pago" | "other";
 
-// 2. Interfaces para los datos de los gráficos
 interface BarDataRow {
   month: string;
   project: number;
   recurring: number;
+  pago: number;
   other: number;
 }
 
@@ -47,9 +47,10 @@ interface PieDataRow {
 }
 
 const chartConfig = {
-  project: { label: "Proyecto", color: "#4285F4" }, // Azul
-  recurring: { label: "Recurrente", color: "#7E57C2" }, // Violeta
-  other: { label: "Otro", color: "#9AA0A6" }, // Gris
+  project: { label: "Proyecto", color: "#4285F4" },
+  recurring: { label: "Recurrente", color: "#7E57C2" },
+  pago: { label: "Pago", color: "#E53935" },
+  other: { label: "Otro", color: "#9AA0A6" },
 } satisfies ChartConfig;
 
 export function DashboardTab({ data }: { data: Transaction[] }) {
@@ -65,14 +66,14 @@ export function DashboardTab({ data }: { data: Transaction[] }) {
           month: monthName,
           project: 0,
           recurring: 0,
+          pago: 0,
           other: 0,
         };
       }
 
       const cat = t.category as CategoryKey;
-      // Sumamos al acumulador asegurando que la categoría sea válida
       if (cat in monthsMap[monthName]) {
-        monthsMap[monthName][cat] += t.amount;
+        monthsMap[monthName][cat] += cat === "pago" ? -t.amount : t.amount;
       }
     });
 
@@ -86,6 +87,7 @@ export function DashboardTab({ data }: { data: Transaction[] }) {
     const totals: Record<CategoryKey, number> = {
       project: 0,
       recurring: 0,
+      pago: 0,
       other: 0,
     };
 
@@ -106,6 +108,11 @@ export function DashboardTab({ data }: { data: Transaction[] }) {
         name: "Recurrente",
         value: totals.recurring,
         fill: chartConfig.recurring.color,
+      },
+      {
+        name: "Pagos",
+        value: totals.pago,
+        fill: chartConfig.pago.color,
       },
       { name: "Otros", value: totals.other, fill: chartConfig.other.color },
     ].filter((item) => item.value > 0);
@@ -135,6 +142,11 @@ export function DashboardTab({ data }: { data: Transaction[] }) {
                 dataKey="recurring"
                 fill={chartConfig.recurring.color}
                 stackId="a"
+              />
+              <Bar
+                dataKey="pago"
+                fill={chartConfig.pago.color}
+                stackId="b"
               />
               <Bar
                 dataKey="other"

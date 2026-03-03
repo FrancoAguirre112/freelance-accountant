@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, index } from "drizzle-orm/sqlite-core";
 import { relations } from "drizzle-orm";
 
 // === AUTH.JS TABLES ===
@@ -28,7 +28,9 @@ export const accounts = sqliteTable("account", {
   scope: text("scope"),
   id_token: text("id_token"),
   session_state: text("session_state"),
-});
+}, (table) => [
+  index("accounts_user_id_idx").on(table.userId),
+]);
 
 export const sessions = sqliteTable("session", {
   sessionToken: text("sessionToken").primaryKey(),
@@ -51,7 +53,9 @@ export const clients = sqliteTable("clients", {
   userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   status: text("status").default("active"),
-});
+}, (table) => [
+  index("clients_user_id_idx").on(table.userId),
+]);
 
 export const projects = sqliteTable("projects", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -60,7 +64,20 @@ export const projects = sqliteTable("projects", {
   name: text("name").notNull(),
   totalAmount: real("total_amount").notNull(),
   status: text("status").default("en_desarrollo"),
-});
+}, (table) => [
+  index("projects_user_id_idx").on(table.userId),
+]);
+
+export const pagos = sqliteTable("pagos", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+  clientId: integer("client_id").references(() => clients.id),
+  name: text("name").notNull(),
+  totalAmount: real("total_amount").notNull(),
+  status: text("status").default("pendiente"),
+}, (table) => [
+  index("pagos_user_id_idx").on(table.userId),
+]);
 
 export const recurringServices = sqliteTable("recurring_services", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -68,7 +85,10 @@ export const recurringServices = sqliteTable("recurring_services", {
   clientId: integer("client_id").references(() => clients.id),
   name: text("name").notNull(),
   amount: real("amount").notNull(),
-});
+  type: text("type", { enum: ["service", "payment"] }).notNull().default("service"),
+}, (table) => [
+  index("recurring_services_user_id_idx").on(table.userId),
+]);
 
 export const transactions = sqliteTable("transactions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -77,13 +97,17 @@ export const transactions = sqliteTable("transactions", {
   imputedDate: integer("imputed_date", { mode: "timestamp" }),
   amount: real("amount").notNull(),
   category: text("category", {
-    enum: ["project", "recurring", "other"],
+    enum: ["project", "recurring", "pago", "other"],
   }).notNull(),
   description: text("description"),
   projectId: integer("project_id").references(() => projects.id),
+  pagoId: integer("pago_id").references(() => pagos.id),
   serviceId: integer("service_id").references(() => recurringServices.id),
   status: text("status").default("paid"),
-});
+}, (table) => [
+  index("transactions_user_id_idx").on(table.userId),
+  index("transactions_user_date_idx").on(table.userId, table.date),
+]);
 
 // === RELATIONS ===
 
@@ -92,6 +116,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
   clients: many(clients),
   projects: many(projects),
+  pagos: many(pagos),
   transactions: many(transactions),
   recurringServices: many(recurringServices),
 }));
@@ -99,6 +124,7 @@ export const usersRelations = relations(users, ({ many }) => ({
 export const clientsRelations = relations(clients, ({ one, many }) => ({
   user: one(users, { fields: [clients.userId], references: [users.id] }),
   projects: many(projects),
+  pagos: many(pagos),
   services: many(recurringServices),
 }));
 
@@ -106,6 +132,15 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   user: one(users, { fields: [projects.userId], references: [users.id] }),
   client: one(clients, {
     fields: [projects.clientId],
+    references: [clients.id],
+  }),
+  transactions: many(transactions),
+}));
+
+export const pagosRelations = relations(pagos, ({ one, many }) => ({
+  user: one(users, { fields: [pagos.userId], references: [users.id] }),
+  client: one(clients, {
+    fields: [pagos.clientId],
     references: [clients.id],
   }),
   transactions: many(transactions),
@@ -127,6 +162,10 @@ export const transactionsRelations = relations(transactions, ({ one }) => ({
   project: one(projects, {
     fields: [transactions.projectId],
     references: [projects.id],
+  }),
+  pago: one(pagos, {
+    fields: [transactions.pagoId],
+    references: [pagos.id],
   }),
   service: one(recurringServices, {
     fields: [transactions.serviceId],

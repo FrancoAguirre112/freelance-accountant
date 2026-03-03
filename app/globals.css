@@ -60,17 +60,17 @@
   --secondary: oklch(0.94 0.03 290);
   --secondary-foreground: oklch(0.25 0.12 290);
   --muted: oklch(0.95 0.02 290);
-  --muted-foreground: oklch(0.50 0.04 290);
+  --muted-foreground: oklch(0.5 0.04 290);
   --accent: oklch(0.94 0.03 290);
   --accent-foreground: oklch(0.25 0.12 290);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.90 0.02 290);
-  --input: oklch(0.90 0.02 290);
+  --border: oklch(0.9 0.02 290);
+  --input: oklch(0.9 0.02 290);
   --ring: oklch(0.72 0.14 290);
   --chart-1: oklch(0.72 0.14 290);
   --chart-2: oklch(0.38 0.19 290);
-  --chart-3: oklch(0.60 0.12 190);
-  --chart-4: oklch(0.75 0.10 330);
+  --chart-3: oklch(0.6 0.12 190);
+  --chart-4: oklch(0.75 0.1 330);
   --chart-5: oklch(0.55 0.08 290);
   --sidebar: oklch(0.98 0.008 290);
   --sidebar-foreground: oklch(0.18 0.03 290);
@@ -78,16 +78,16 @@
   --sidebar-primary-foreground: oklch(0.98 0.008 290);
   --sidebar-accent: oklch(0.94 0.03 290);
   --sidebar-accent-foreground: oklch(0.25 0.12 290);
-  --sidebar-border: oklch(0.90 0.02 290);
+  --sidebar-border: oklch(0.9 0.02 290);
   --sidebar-ring: oklch(0.72 0.14 290);
 }
 
 .dark {
   --background: oklch(0.14 0.02 290);
   --foreground: oklch(0.94 0.02 290);
-  --card: oklch(0.20 0.03 290);
+  --card: oklch(0.2 0.03 290);
   --card-foreground: oklch(0.94 0.02 290);
-  --popover: oklch(0.20 0.03 290);
+  --popover: oklch(0.2 0.03 290);
   --popover-foreground: oklch(0.94 0.02 290);
   --primary: oklch(0.38 0.19 290);
   --primary-foreground: oklch(0.94 0.02 290);
@@ -102,9 +102,9 @@
   --input: oklch(0.27 0.05 290);
   --ring: oklch(0.72 0.14 290);
   --chart-1: oklch(0.72 0.14 290);
-  --chart-2: oklch(0.50 0.18 290);
-  --chart-3: oklch(0.60 0.12 190);
-  --chart-4: oklch(0.75 0.10 330);
+  --chart-2: oklch(0.5 0.18 290);
+  --chart-3: oklch(0.6 0.12 190);
+  --chart-4: oklch(0.75 0.1 330);
   --chart-5: oklch(0.55 0.08 290);
   --sidebar: oklch(0.17 0.03 290);
   --sidebar-foreground: oklch(0.94 0.02 290);
@@ -123,7 +123,11 @@
   body {
     @apply bg-background text-foreground;
   }
-  a, button, input, select, textarea {
+  a,
+  button,
+  input,
+  select,
+  textarea {
     touch-action: manipulation;
   }
   [role="dialog"] {
@@ -133,4 +137,8 @@
 
 button.border-input.data-\[placeholder\]\:text-muted-foreground.\[\&_svg\:not\(\[class\*\=\'text-\'\]\)\]\:text-muted-foreground.focus-visible\:border-ring.focus-visible\:ring-ring\/50.aria-invalid\:ring-destructive\/20.dark\:aria-invalid\:ring-destructive\/40.aria-invalid\:border-destructive.dark\:bg-input\/30.dark\:hover\:bg-input\/50.flex.w-fit.items-center.justify-between.gap-2.rounded-md.border.bg-transparent.px-3.py-2.text-sm.whitespace-nowrap.shadow-xs.transition-\[color\,box-shadow\].outline-none.focus-visible\:ring-\[3px\].disabled\:cursor-not-allowed.disabled\:opacity-50.data-\[size\=default\]\:h-9.data-\[size\=sm\]\:h-8.\*\:data-\[slot\=select-value\]\:line-clamp-1.\*\:data-\[slot\=select-value\]\:flex.\*\:data-\[slot\=select-value\]\:items-center.\*\:data-\[slot\=select-value\]\:gap-2.\[\&_svg\]\:pointer-events-none.\[\&_svg\]\:shrink-0.\[\&_svg\:not\(\[class\*\=\'size-\'\]\)\]\:size-4 {
   width: 100%;
+}
+
+button:hover {
+  cursor: pointer;
 }

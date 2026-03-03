@@ -18,37 +18,34 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
-interface Item {
+interface Pago {
   id: number;
   name: string;
 }
 
-interface SearchableFilterSelectProps {
-  items: Item[];
-  value: string;
-  onValueChange: (value: string) => void;
-  placeholder: string;
-  label: string;
+interface PagoComboboxProps {
+  pagos: Pago[];
+  name?: string;
+  required?: boolean;
 }
 
-export function SearchableFilterSelect({
-  items,
-  value,
-  onValueChange,
-  placeholder,
-  label,
-}: SearchableFilterSelectProps) {
+export function PagoCombobox({
+  pagos,
+  name,
+  required,
+}: PagoComboboxProps) {
   const [open, setOpen] = React.useState(false);
+  const [value, setValue] = React.useState("");
 
-  // Encontrar el nombre del ítem seleccionado para mostrarlo en el botón
-  const selectedItem = items.find((item) => item.id.toString() === value);
+  const selectedPago = pagos.find(
+    (pago) => pago.id.toString() === value,
+  );
 
   return (
-    <div className="space-y-2">
-      <span className="peer-disabled:opacity-70 font-medium text-sm leading-none peer-disabled:cursor-not-allowed">
-        {label}
-      </span>
-      <Popover open={open} onOpenChange={setOpen}>
+    <div className="flex flex-col w-full">
+      <input type="hidden" name={name} value={value} required={required} />
+
+      <Popover open={open} onOpenChange={setOpen} modal={true}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
@@ -56,9 +53,11 @@ export function SearchableFilterSelect({
             aria-expanded={open}
             className="justify-between w-full font-normal"
           >
-            {value === "all"
-              ? `Todos l@s ${label.toLowerCase()}s`
-              : selectedItem?.name || placeholder}
+            {value ? (
+              selectedPago?.name
+            ) : (
+              <span className="text-muted-foreground">Buscar pago...</span>
+            )}
             <ChevronsUpDown className="opacity-50 ml-2 w-4 h-4 shrink-0" />
           </Button>
         </PopoverTrigger>
@@ -67,46 +66,44 @@ export function SearchableFilterSelect({
           align="start"
         >
           <Command>
-            <CommandInput placeholder={`Buscar ${label.toLowerCase()}...`} />
+            <CommandInput placeholder="Buscar pago..." />
             <CommandList>
-              <CommandEmpty>No se encontraron resultados.</CommandEmpty>
+              <CommandEmpty>No se encontró el pago.</CommandEmpty>
               <CommandGroup>
-                {/* Opción "Todos" */}
                 <CommandItem
-                  value="all"
+                  value="none"
                   onSelect={() => {
-                    onValueChange("all");
+                    setValue("");
                     setOpen(false);
                   }}
                 >
                   <Check
                     className={cn(
                       "mr-2 w-4 h-4",
-                      value === "all" ? "opacity-100" : "opacity-0",
+                      value === "" ? "opacity-100" : "opacity-0",
                     )}
                   />
-                  Todos l@s {label.toLowerCase()}s
+                  Ninguno (Sin vincular)
                 </CommandItem>
 
-                {/* Lista de Items */}
-                {items.map((item) => (
+                {pagos.map((pago) => (
                   <CommandItem
-                    key={item.id}
-                    value={item.name} // Buscamos por nombre
+                    key={pago.id}
+                    value={pago.name}
                     onSelect={() => {
-                      onValueChange(item.id.toString()); // Guardamos el ID
+                      setValue(pago.id.toString());
                       setOpen(false);
                     }}
                   >
                     <Check
                       className={cn(
                         "mr-2 w-4 h-4",
-                        value === item.id.toString()
+                        value === pago.id.toString()
                           ? "opacity-100"
                           : "opacity-0",
                       )}
                     />
-                    {item.name}
+                    {pago.name}
                   </CommandItem>
                 ))}
               </CommandGroup>

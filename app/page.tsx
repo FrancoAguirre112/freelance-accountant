@@ -2,22 +2,22 @@ import { auth } from "@/auth";
 import { DashboardTab } from "@/components/dashboard-tab";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { TransactionsTab } from "@/components/transactions-tab";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ActiveTabProvider } from "@/components/active-tab-context";
+import { SyncedTabs } from "@/components/synced-tabs";
 import { UserMenu } from "@/components/user-menu";
 import { db } from "@/db";
-import { clients, projects, recurringServices, transactions } from "@/db/schema";
+import { clients, projects, pagos, recurringServices, transactions } from "@/db/schema";
 import { eq, and, between, desc } from "drizzle-orm";
-import { startOfMonth, endOfMonth } from "date-fns";
 import { ProjectsTab } from "@/components/projects-tab";
+import { PagosTab } from "@/components/pagos-tab";
 import { MaintenanceTab } from "@/components/maintenance-tab";
 import { AddDataDialog } from "@/components/add-data-dialog";
-import { CSVImporter } from "@/components/csv-importer";
 import { ClientsDatabaseDialog } from "@/components/clients-database-dialog";
-import { ActiveFilters } from "@/components/active-filters";
-import { FiltersDialog } from "@/components/filters-dialog";
 import Image from "next/image";
 import { Montserrat } from "next/font/google";
 import { ThemeToggle } from "@/components/theme-toggle";
+
 
 // 2. Initialize Montserrat with the 'Black' weight (900)
 const montserrat = Montserrat({ 
@@ -33,9 +33,6 @@ export default async function DashboardPage({
   searchParams: Promise<{
     from?: string;
     to?: string;
-    clientId?: string;
-    projectId?: string;
-    category?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -43,12 +40,19 @@ export default async function DashboardPage({
   const session = await auth();
   const userId = session!.user.id;
 
-  const [allClients, allProjects, allServices] = await Promise.all([
+  const [allClients, allProjects, allPagos, allServices] = await Promise.all([
     db.query.clients.findMany({
       where: eq(clients.userId, userId),
     }),
     db.query.projects.findMany({
       where: eq(projects.userId, userId),
+      with: {
+        client: true,
+        transactions: true,
+      },
+    }),
+    db.query.pagos.findMany({
+      where: eq(pagos.userId, userId),
       with: {
         client: true,
         transactions: true,
@@ -102,7 +106,7 @@ export default async function DashboardPage({
   });
 
   // 4. NORMALIZE OUTPUT (For Dashboard/Transactions List)
-  let allTransactions = rawTransactions.map((t) => {
+  const allTransactions = rawTransactions.map((t) => {
     const safeDate = new Date(t.date);
     safeDate.setUTCHours(12, 0, 0, 0); // Force Noon UTC for display
 
@@ -118,28 +122,8 @@ export default async function DashboardPage({
     };
   });
 
-  // --- 5. FILTERING LOGIC ---
-  if (params.clientId) {
-    const filterId = parseInt(params.clientId);
-    allTransactions = allTransactions.filter((t) => {
-      const projectClientId = t.project?.clientId;
-      const serviceClientId = t.service?.clientId;
-      return projectClientId === filterId || serviceClientId === filterId;
-    });
-  }
-
-  if (params.projectId) {
-    const filterId = parseInt(params.projectId);
-    allTransactions = allTransactions.filter((t) => t.projectId === filterId);
-  }
-
-  if (params.category) {
-    allTransactions = allTransactions.filter(
-      (t) => t.category === params.category,
-    );
-  }
-
   return (
+    <ActiveTabProvider>
     <div className="flex flex-col gap-8 p-4 md:p-8 overflow-hidden w-full">
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
         <div className="flex items-center gap-3">
@@ -157,36 +141,30 @@ export default async function DashboardPage({
   </h1>
 </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full md:w-auto">
-          <CSVImporter />
+        <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto">
           <AddDataDialog
             clientsData={activeClients}
             projectsData={activeProjects}
+            pagosData={allPagos}
             servicesData={activeServices}
           />
-          <div className="hidden sm:block mx-2 bg-border w-[1px] h-8" />
-          <DateRangePicker />
-          <div className="hidden sm:block mx-2 bg-border w-[1px] h-8" />
+          <ClientsDatabaseDialog clients={allClients} />
+          <div className="mx-1 bg-border w-[1px] h-8 shrink-0" />
           <ThemeToggle />
           <UserMenu />
         </div>
       </div>
 
-      <ActiveFilters clients={allClients} projects={allProjects} />
-
-      <Tabs defaultValue="overview" className="space-y-4">
+      <SyncedTabs defaultValue="overview" className="space-y-4">
         <TabsList className="flex flex-col md:flex-row justify-between bg-transparent p-0 w-full h-auto gap-4 md:gap-0">
           <div className="flex bg-muted p-1 rounded-md overflow-x-auto w-full md:w-auto whitespace-nowrap">
             <TabsTrigger value="overview">Dashboard</TabsTrigger>
             <TabsTrigger value="transactions">Movimientos</TabsTrigger>
             <TabsTrigger value="projects">Proyectos</TabsTrigger>
-            <TabsTrigger value="maintenance">Servicios Recurrentes</TabsTrigger>
+            <TabsTrigger value="pagos">Pagos</TabsTrigger>
+            <TabsTrigger value="maintenance">Recurrentes</TabsTrigger>
           </div>
-
-          <div className="flex gap-2 w-full md:w-auto overflow-x-auto whitespace-nowrap">
-            <ClientsDatabaseDialog clients={allClients} />
-            <FiltersDialog clients={allClients} projects={allProjects} />
-          </div>
+          <DateRangePicker />
         </TabsList>
 
         <TabsContent value="overview">
@@ -206,6 +184,10 @@ export default async function DashboardPage({
           <ProjectsTab projects={allProjects} clients={allClients} />
         </TabsContent>
 
+        <TabsContent value="pagos">
+          <PagosTab pagos={allPagos} clients={allClients} />
+        </TabsContent>
+
         <TabsContent value="maintenance">
           <MaintenanceTab
             from={displayFrom}
@@ -215,7 +197,8 @@ export default async function DashboardPage({
             services={allServices}
           />
         </TabsContent>
-      </Tabs>
+      </SyncedTabs>
     </div>
+    </ActiveTabProvider>
   );
 }

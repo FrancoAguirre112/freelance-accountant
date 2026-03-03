@@ -31,6 +31,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ClientCombobox } from "@/components/client-combobox";
 import {
   updateRecurringServiceAction,
@@ -45,6 +52,7 @@ interface Client {
 interface MaintenanceService {
   serviceId: number;
   serviceName: string;
+  serviceType: string;
   monthlyFee: number;
   clientId: number | null;
   clientName: string;
@@ -64,7 +72,7 @@ export function MaintenanceRowActions({
   const handleDelete = async () => {
     const res = await deleteRecurringServiceAction(service.serviceId);
     if (res.success) {
-      toast.success("Servicio eliminado correctamente");
+      toast.success("Operación eliminada correctamente");
     } else {
       toast.error("Error al eliminar");
     }
@@ -79,10 +87,11 @@ export function MaintenanceRowActions({
       name: formData.get("name") as string,
       amount: parseFloat(formData.get("amount") as string),
       clientId: Number(formData.get("clientId")),
+      type: formData.get("type") as "service" | "payment",
     });
 
     if (res.success) {
-      toast.success("Servicio actualizado");
+      toast.success("Operación actualizada");
       setIsEditOpen(false);
     } else {
       toast.error("Error al actualizar");
@@ -117,16 +126,15 @@ export function MaintenanceRowActions({
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Editar Mantenimiento</DialogTitle>
+            <DialogTitle>Editar Operación Recurrente</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleEditSubmit} className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label>Nombre del Servicio</Label>
+              <Label>Nombre</Label>
               <Input name="name" defaultValue={service.serviceName} required />
             </div>
             <div className="space-y-2">
-              <Label>Cliente</Label>
-              {/* Reutilizamos el ClientCombobox existente */}
+              <Label>Entidad</Label>
               <ClientCombobox
                 clients={clients}
                 name="clientId"
@@ -135,7 +143,19 @@ export function MaintenanceRowActions({
               />
             </div>
             <div className="space-y-2">
-              <Label>Abono Mensual (USD)</Label>
+              <Label>Tipo</Label>
+              <Select name="type" defaultValue={service.serviceType || "service"}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="service">Ingreso</SelectItem>
+                  <SelectItem value="payment">Egreso</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Monto Mensual (USD)</Label>
               <Input
                 name="amount"
                 type="number"
@@ -164,9 +184,8 @@ export function MaintenanceRowActions({
           <AlertDialogHeader>
             <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta acción eliminará el servicio de mantenimiento{" "}
-              {`"
-              ${service.serviceName}".`}
+              Esta acción eliminará la operación recurrente{" "}
+              {`"${service.serviceName}".`}
               <br />
               <br />
               <strong>Nota:</strong> Las transacciones históricas NO se

@@ -87,11 +87,11 @@ export function FiltersDialog({ clients, projects }: FiltersDialogProps) {
 
         {/* LAYOUT GRID: 2 columnas base */}
         <div className="gap-4 grid grid-cols-2 py-4">
-          {/* FILTRO: CLIENTE (Full Width) */}
+          {/* FILTRO: ENTIDAD (Full Width) */}
           <div className="col-span-2">
             <SearchableFilterSelect
-              label="Cliente"
-              placeholder="Seleccionar cliente"
+              label="Entidad"
+              placeholder="Seleccionar entidad"
               items={clients}
               value={clientId}
               onValueChange={setClientId}
@@ -120,6 +120,7 @@ export function FiltersDialog({ clients, projects }: FiltersDialogProps) {
                 <SelectItem value="all">Todas</SelectItem>
                 <SelectItem value="project">Proyecto</SelectItem>
                 <SelectItem value="recurring">Recurrente</SelectItem>
+                <SelectItem value="pago">Pago</SelectItem>
                 <SelectItem value="other">Otro</SelectItem>
               </SelectContent>
             </Select>

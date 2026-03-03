@@ -30,29 +30,31 @@ import { ClientCombobox } from "@/components/client-combobox";
 import {
   deleteTransactionAction,
   deleteProjectAction,
+  deletePagoAction,
   deleteRecurringServiceAction,
   updateTransactionAction,
   updateProjectAction,
+  updatePagoAction,
   updateRecurringServiceAction,
   createRecurringServiceAction,
+  createRecurringPaymentFromPagoAction,
 } from "@/app/actions";
 import { type InferSelectModel } from "drizzle-orm";
 import {
   transactions,
   projects,
+  pagos,
   recurringServices,
   clients,
 } from "@/db/schema";
 
-// 1. Definimos los tipos exactos desde la base de datos
 type Transaction = InferSelectModel<typeof transactions>;
 type Project = InferSelectModel<typeof projects>;
+type Pago = InferSelectModel<typeof pagos>;
 type RecurringService = InferSelectModel<typeof recurringServices>;
 type Client = InferSelectModel<typeof clients>;
-type TransactionCategory = "project" | "recurring" | "other";
+type TransactionCategory = "project" | "recurring" | "pago" | "other";
 
-// 2. Creamos una unión discriminada para los props
-// Esto le dice a TS: "Si type es 'transaction', row TIENE que ser una Transaction"
 type RowActionsProps =
   | {
       type: "transaction";
@@ -61,6 +63,7 @@ type RowActionsProps =
       projects?: Project[];
     }
   | { type: "project"; row: Project; clients?: Client[]; projects?: Project[] }
+  | { type: "pago"; row: Pago; clients?: Client[]; projects?: Project[] }
   | {
       type: "recurring";
       row: RecurringService;
@@ -71,6 +74,7 @@ type RowActionsProps =
 export function RowActions({ row, type, clients, projects }: RowActionsProps) {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isConvertOpen, setIsConvertOpen] = useState(false);
+  const [editKey, setEditKey] = useState(0);
 
   const handleDelete = async () => {
     if (!confirm("¿Estás seguro de que quieres eliminar esto?")) return;
@@ -79,6 +83,7 @@ export function RowActions({ row, type, clients, projects }: RowActionsProps) {
     // TS sabe que 'row' tiene 'id' en todos los casos
     if (type === "transaction") res = await deleteTransactionAction(row.id);
     if (type === "project") res = await deleteProjectAction(row.id);
+    if (type === "pago") res = await deletePagoAction(row.id);
     if (type === "recurring") res = await deleteRecurringServiceAction(row.id);
 
     if (res?.success) toast.success("Eliminado correctamente");
@@ -106,6 +111,13 @@ export function RowActions({ row, type, clients, projects }: RowActionsProps) {
         totalAmount: parseFloat(formData.get("totalAmount") as string),
         status: formData.get("status") as string,
       });
+    } else if (type === "pago") {
+      res = await updatePagoAction(row.id, {
+        name: formData.get("name") as string,
+        clientId: parseInt(formData.get("clientId") as string),
+        totalAmount: parseFloat(formData.get("totalAmount") as string),
+        status: formData.get("status") as string,
+      });
     } else if (type === "recurring") {
       res = await updateRecurringServiceAction(row.id, {
         name: formData.get("name") as string,
@@ -121,27 +133,35 @@ export function RowActions({ row, type, clients, projects }: RowActionsProps) {
 
   const handleConvert = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (type !== "project") return;
+    if (type !== "project" && type !== "pago") return;
 
     const formData = new FormData(e.currentTarget);
-    const client = clients?.find((c) => c.id === row.clientId);
+    let res;
 
-    if (!client) {
-      toast.error("Error al identificar el cliente");
-      return;
+    if (type === "project") {
+      const client = clients?.find((c) => c.id === row.clientId);
+      if (!client) {
+        toast.error("Error al identificar la entidad");
+        return;
+      }
+      res = await createRecurringServiceAction({
+        name: formData.get("name") as string,
+        clientName: client.name,
+        amount: parseFloat(formData.get("amount") as string),
+      });
+    } else {
+      res = await createRecurringPaymentFromPagoAction({
+        name: formData.get("name") as string,
+        clientId: row.clientId!,
+        amount: parseFloat(formData.get("amount") as string),
+      });
     }
 
-    const res = await createRecurringServiceAction({
-      name: formData.get("name") as string,
-      clientName: client.name,
-      amount: parseFloat(formData.get("amount") as string),
-    });
-
     if (res.success) {
-      toast.success("Servicio recurrente creado con éxito");
+      toast.success("Operación recurrente creada con éxito");
       setIsConvertOpen(false);
     } else {
-      toast.error("Error al crear el servicio recurrente");
+      toast.error("Error al crear la operación recurrente");
     }
   };
 
@@ -155,10 +175,18 @@ export function RowActions({ row, type, clients, projects }: RowActionsProps) {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuLabel>Acciones</DropdownMenuLabel>
-          <DropdownMenuItem onClick={() => setIsEditOpen(true)}>
+          <DropdownMenuItem onClick={() => { setEditKey((k) => k + 1); setIsEditOpen(true); }}>
             <Pencil className="mr-2 w-4 h-4" /> Editar
           </DropdownMenuItem>
           {type === "project" && row.status === "finalizado" && (
+            <DropdownMenuItem
+              onClick={() => setIsConvertOpen(true)}
+              className="text-blue-600 focus:text-blue-600"
+            >
+              <RefreshCw className="mr-2 w-4 h-4" /> Convertir a Recurrente
+            </DropdownMenuItem>
+          )}
+          {type === "pago" && (
             <DropdownMenuItem
               onClick={() => setIsConvertOpen(true)}
               className="text-blue-600 focus:text-blue-600"
@@ -181,10 +209,12 @@ export function RowActions({ row, type, clients, projects }: RowActionsProps) {
                 ? "Transacción"
                 : type === "project"
                   ? "Proyecto"
-                  : "Servicio"}
+                  : type === "pago"
+                    ? "Pago"
+                    : "Servicio"}
             </DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleUpdate} className="space-y-4">
+          <form key={editKey} onSubmit={handleUpdate} className="space-y-4">
             {/* CAMPOS DE TRANSACCIÓN */}
             {/* Al comprobar type === "transaction", TS sabe que 'row' es Transaction */}
             {type === "transaction" && (
@@ -223,6 +253,7 @@ export function RowActions({ row, type, clients, projects }: RowActionsProps) {
                     <SelectContent>
                       <SelectItem value="project">Proyecto</SelectItem>
                       <SelectItem value="recurring">Recurrente</SelectItem>
+                      <SelectItem value="pago">Pago</SelectItem>
                       <SelectItem value="other">Otro</SelectItem>
                     </SelectContent>
                   </Select>
@@ -245,7 +276,7 @@ export function RowActions({ row, type, clients, projects }: RowActionsProps) {
                   <Input name="name" defaultValue={row.name} required />
                 </div>
                 <div className="space-y-2">
-                  <Label>Cliente</Label>
+                  <Label>Entidad</Label>
                   <ClientCombobox
                     clients={clients || []}
                     name="clientId"
@@ -284,6 +315,51 @@ export function RowActions({ row, type, clients, projects }: RowActionsProps) {
               </>
             )}
 
+            {/* CAMPOS DE PAGO */}
+            {type === "pago" && (
+              <>
+                <div className="space-y-2">
+                  <Label>Nombre</Label>
+                  <Input name="name" defaultValue={row.name} required />
+                </div>
+                <div className="space-y-2">
+                  <Label>Entidad</Label>
+                  <ClientCombobox
+                    clients={clients || []}
+                    name="clientId"
+                    defaultValue={row.clientId?.toString()}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Monto Total</Label>
+                  <Input
+                    name="totalAmount"
+                    type="number"
+                    step="0.01"
+                    defaultValue={row.totalAmount}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Estado</Label>
+                  <Select
+                    name="status"
+                    defaultValue={row.status || "pendiente"}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pendiente">Pendiente</SelectItem>
+                      <SelectItem value="pago_parcial">Pago Parcial</SelectItem>
+                      <SelectItem value="saldado">Saldado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
+
             {/* CAMPOS DE RECURRENTE */}
             {type === "recurring" && (
               <>
@@ -316,19 +392,21 @@ export function RowActions({ row, type, clients, projects }: RowActionsProps) {
             <DialogTitle>Convertir a Recurrente</DialogTitle>
           </DialogHeader>
           <p className="text-muted-foreground text-sm">
-            Se creará un nuevo servicio recurrente para este cliente.
+            {type === "pago"
+              ? "Se creará un pago recurrente (egreso) para esta entidad."
+              : "Se creará un servicio recurrente (ingreso) para esta entidad."}
           </p>
           <form onSubmit={handleConvert} className="space-y-4">
             <div className="space-y-2">
-              <Label>Nombre del Servicio</Label>
+              <Label>Nombre de la Operación</Label>
               <Input
                 name="name"
-                defaultValue={type === "project" ? row.name : ""}
+                defaultValue={type === "project" || type === "pago" ? row.name : ""}
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label>Abono Mensual (USD)</Label>
+              <Label>Monto Mensual (USD)</Label>
               <Input
                 name="amount"
                 type="number"

@@ -25,7 +25,7 @@ export function ActiveFilters({ clients, projects }: ActiveFiltersProps) {
     switch (key) {
       case "clientId":
         const client = clients.find((c) => c.id.toString() === value);
-        return client ? `Cliente: ${client.name}` : `Cliente ID: ${value}`;
+        return client ? `Entidad: ${client.name}` : `Entidad ID: ${value}`;
 
       case "projectId":
         const project = projects.find((p) => p.id.toString() === value);
@@ -36,6 +36,7 @@ export function ActiveFilters({ clients, projects }: ActiveFiltersProps) {
         const catMap: Record<string, string> = {
           project: "Proyecto",
           recurring: "Recurrente",
+          pago: "Pago",
           other: "Otro",
         };
         return `Categoría: ${catMap[value] || value}`;
