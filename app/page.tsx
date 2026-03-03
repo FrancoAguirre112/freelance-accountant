@@ -129,7 +129,7 @@ export default async function DashboardPage({
       {/* Mobile header */}
       <div className="flex md:hidden items-center gap-2">
         <MobileNav
-          userMenu={<UserMenu />}
+          userMenu={<UserMenu expand />}
           entidadesButton={<ClientsDatabaseDialog clients={allClients} />}
         />
       </div>

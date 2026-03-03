@@ -75,12 +75,11 @@ export function MobileNav({
             </SheetClose>
           </SheetHeader>
 
-          <div
-            className="flex flex-col gap-3 px-4"
-            onClick={() => setSheetOpen(false)}
-          >
-            {userMenu}
-            {entidadesButton}
+          <div className="flex flex-col gap-3 px-4">
+            <div className="grid">{userMenu}</div>
+            <div className="grid" onClick={() => setSheetOpen(false)}>
+              {entidadesButton}
+            </div>
           </div>
 
           <div className="mt-auto px-4 pb-4">

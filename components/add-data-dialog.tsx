@@ -208,7 +208,7 @@ export function AddDataDialog({
         {fabMode ? (
           <Button
             size="icon"
-            className="h-14 w-14 rounded-full bg-purple-600 hover:bg-purple-700 shadow-lg"
+            className="h-14 w-14 rounded-full bg-[#48199D] hover:bg-[#48199D]/90 shadow-lg"
           >
             <Plus className="w-6 h-6 text-white" />
           </Button>

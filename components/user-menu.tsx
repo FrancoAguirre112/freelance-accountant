@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { LogOut } from "lucide-react";
 
-export async function UserMenu() {
+export async function UserMenu({ expand = false }: { expand?: boolean } = {}) {
   const session = await auth();
   if (!session?.user) return null;
 
@@ -23,24 +23,24 @@ export async function UserMenu() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="flex items-center gap-2 rounded-full hover:bg-muted p-1 pr-3 transition-colors">
+      <DropdownMenuTrigger className={`flex items-center gap-2 rounded-full hover:bg-muted p-1 pr-3 transition-colors ${expand ? "w-full" : ""}`}>
         {session.user.image ? (
           <img
             src={session.user.image}
             alt={session.user.name ?? "User"}
             referrerPolicy="no-referrer"
-            className="w-8 h-8 rounded-full"
+            className="w-8 h-8 rounded-full shrink-0"
           />
         ) : (
-          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-medium">
+          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-medium shrink-0">
             {initials}
           </div>
         )}
-        <span className="text-sm font-medium hidden sm:inline">
+        <span className={`text-sm font-medium ${expand ? "" : "hidden sm:inline"}`}>
           {session.user.name}
         </span>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent align={expand ? "start" : "end"}>
         <DropdownMenuLabel className="flex flex-col gap-1">
           <span>{session.user.name}</span>
           <span className="text-xs text-muted-foreground font-normal">
