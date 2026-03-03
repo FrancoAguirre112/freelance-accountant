@@ -5,17 +5,16 @@ import { useActiveTab } from "@/components/active-tab-context";
 
 export function SyncedTabs({
   children,
-  defaultValue,
   className,
 }: {
   children: React.ReactNode;
-  defaultValue: string;
+  defaultValue?: string;
   className?: string;
 }) {
-  const { setActiveTab } = useActiveTab();
+  const { activeTab, setActiveTab } = useActiveTab();
   return (
     <Tabs
-      defaultValue={defaultValue}
+      value={activeTab}
       className={className}
       onValueChange={setActiveTab}
     >

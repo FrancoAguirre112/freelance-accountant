@@ -48,11 +48,13 @@ export function AddDataDialog({
   projectsData,
   pagosData,
   servicesData,
+  fabMode = false,
 }: {
   clientsData: Client[];
   projectsData: Project[];
   pagosData: Pago[];
   servicesData: RecurringService[];
+  fabMode?: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
   const [selectedCategory, setSelectedCategory] =
@@ -203,9 +205,18 @@ export function AddDataDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="gap-2">
-          <Plus className="w-4 h-4" /> Agregar Dato
-        </Button>
+        {fabMode ? (
+          <Button
+            size="icon"
+            className="h-14 w-14 rounded-full bg-purple-600 hover:bg-purple-700 shadow-lg"
+          >
+            <Plus className="w-6 h-6 text-white" />
+          </Button>
+        ) : (
+          <Button className="gap-2">
+            <Plus className="w-4 h-4" /> Agregar Dato
+          </Button>
+        )}
       </DialogTrigger>
       {/* Añadimos z-index alto para asegurar que el modal esté bien posicionado, 
           aunque los Toasts de Sonner suelen renderizarse en un Portal aparte con z-9999 */}

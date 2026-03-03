@@ -17,6 +17,7 @@ import { ClientsDatabaseDialog } from "@/components/clients-database-dialog";
 import Image from "next/image";
 import { Montserrat } from "next/font/google";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { MobileNav } from "@/components/mobile-nav";
 
 
 // 2. Initialize Montserrat with the 'Black' weight (900)
@@ -125,23 +126,30 @@ export default async function DashboardPage({
   return (
     <ActiveTabProvider>
     <div className="flex flex-col gap-8 p-4 md:p-8 overflow-hidden w-full">
-      <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+      {/* Mobile header */}
+      <div className="flex md:hidden items-center gap-2">
+        <MobileNav
+          userMenu={<UserMenu />}
+          entidadesButton={<ClientsDatabaseDialog clients={allClients} />}
+        />
+      </div>
+
+      {/* Desktop header */}
+      <div className="hidden md:flex flex-row justify-between items-center gap-4">
         <div className="flex items-center gap-3">
-  <Image 
-    src="/Flogo.webp" 
-    alt="Logo" 
-    width={500} 
-    height={500} 
-    className="w-10 h-10" 
-  />
-  
+          <Image
+            src="/Flogo.webp"
+            alt="Logo"
+            width={500}
+            height={500}
+            className="w-10 h-10"
+          />
+          <h1 className={`${montserrat.className} text-[40px] leading-[40px] tracking-tight`}>
+            Fiscus
+          </h1>
+        </div>
 
-  <h1 className={`${montserrat.className} text-[40px] leading-[40px] tracking-tight`}>
-    Fiscus
-  </h1>
-</div>
-
-        <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto">
+        <div className="flex items-center gap-2 w-auto overflow-x-auto">
           <AddDataDialog
             clientsData={activeClients}
             projectsData={activeProjects}
@@ -157,7 +165,7 @@ export default async function DashboardPage({
 
       <SyncedTabs defaultValue="overview" className="space-y-4">
         <TabsList className="flex flex-col md:flex-row justify-between bg-transparent p-0 w-full h-auto gap-4 md:gap-0">
-          <div className="flex bg-muted p-1 rounded-md overflow-x-auto w-full md:w-auto whitespace-nowrap">
+          <div className="hidden md:flex bg-muted p-1 rounded-md overflow-x-auto w-auto whitespace-nowrap">
             <TabsTrigger value="overview">Dashboard</TabsTrigger>
             <TabsTrigger value="transactions">Movimientos</TabsTrigger>
             <TabsTrigger value="projects">Proyectos</TabsTrigger>
@@ -198,6 +206,17 @@ export default async function DashboardPage({
           />
         </TabsContent>
       </SyncedTabs>
+
+      {/* Mobile FAB */}
+      <div className="fixed bottom-6 right-6 z-50 md:hidden">
+        <AddDataDialog
+          clientsData={activeClients}
+          projectsData={activeProjects}
+          pagosData={allPagos}
+          servicesData={activeServices}
+          fabMode
+        />
+      </div>
     </div>
     </ActiveTabProvider>
   );
