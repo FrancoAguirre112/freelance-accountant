@@ -27,24 +27,20 @@ interface TransactionWithRelations {
   date: Date;
   imputedDate: Date | null;
   amount: number;
-  category: "project" | "recurring" | "pago" | "other";
+  category: "presupuesto" | "recurring" | "other";
   description: string | null;
-  projectId: number | null;
-  pagoId: number | null;
+  presupuestoId: number | null;
   serviceId: number | null;
   status: string | null;
   userId: string;
-  project?: {
+  presupuesto?: {
     name: string;
-    client?: { name: string } | null;
-  } | null;
-  service?: {
-    name: string;
+    type: string;
     client?: { name: string } | null;
   } | null;
 }
 
-type TransactionCategory = "project" | "recurring" | "pago" | "other";
+type TransactionCategory = "presupuesto" | "recurring" | "other";
 
 const SEARCH_PREFIXES = [
   { key: "e", label: "Entidad" },
@@ -74,9 +70,8 @@ export function TransactionsTab({
         label: "Categoría",
         type: "select",
         options: [
-          { value: "project", label: "Proyecto" },
+          { value: "presupuesto", label: "Presupuesto" },
           { value: "recurring", label: "Recurrente" },
-          { value: "pago", label: "Pago" },
           { value: "other", label: "Otro" },
         ],
       },
@@ -105,8 +100,8 @@ export function TransactionsTab({
       // Apply search
       if (!term) return true;
       const clientName =
-        t.project?.client?.name || t.service?.client?.name || "";
-      const sourceName = t.project?.name || t.service?.name || "";
+        t.presupuesto?.client?.name || "";
+      const sourceName = t.presupuesto?.name || "";
 
       switch (field) {
         case "e":
@@ -128,7 +123,7 @@ export function TransactionsTab({
       let va: string | number, vb: string | number;
       switch (sort.key) {
         case "date": va = a.date.getTime(); vb = b.date.getTime(); break;
-        case "entity": va = a.project?.client?.name || a.service?.client?.name || ""; vb = b.project?.client?.name || b.service?.client?.name || ""; break;
+        case "entity": va = a.presupuesto?.client?.name || ""; vb = b.presupuesto?.client?.name || ""; break;
         case "category": va = a.category; vb = b.category; break;
         case "description": va = a.description || ""; vb = b.description || ""; break;
         case "amount": va = a.amount; vb = b.amount; break;
@@ -140,37 +135,45 @@ export function TransactionsTab({
   }, [filtered, sort]);
 
   const categoryColors: Record<TransactionCategory, string> = {
-    project:
+    presupuesto:
       "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800",
     recurring:
       "bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800",
-    pago: "bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800",
     other:
       "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700",
   };
 
+  const getCategoryLabel = (t: TransactionWithRelations) => {
+    if (t.category === "presupuesto") {
+      return t.presupuesto?.type === "egreso" ? "Pago" : "Ingreso";
+    }
+    if (t.category === "recurring") return "Recurrente";
+    return "Otro";
+  };
+
   const categoryLabels: Record<TransactionCategory, string> = {
-    project: "Proyecto",
+    presupuesto: "Presupuesto",
     recurring: "Recurrente",
-    pago: "Pago",
     other: "Otro",
   };
 
+  const isExpense = (t: TransactionWithRelations) => t.amount < 0;
+
   const totalIncome = filtered
-    .filter((t) => t.category !== "pago")
+    .filter((t) => t.amount > 0)
     .reduce((s, t) => s + t.amount, 0);
   const totalExpense = filtered
-    .filter((t) => t.category === "pago")
-    .reduce((s, t) => s + t.amount, 0);
+    .filter((t) => t.amount < 0)
+    .reduce((s, t) => s + Math.abs(t.amount), 0);
 
   const getExportData = () =>
     filtered.map((t) => ({
       Fecha: fmtDate(t.date, "yyyy-MM-dd"),
-      Entidad: t.project?.client?.name || t.service?.client?.name || "",
-      Origen: t.project?.name || t.service?.name || "",
-      Categoría: categoryLabels[t.category as TransactionCategory] || t.category,
+      Entidad: t.presupuesto?.client?.name || "",
+      Origen: t.presupuesto?.name || "",
+      Categoría: getCategoryLabel(t),
       Descripción: t.description || "",
-      Monto: t.category === "pago" ? -t.amount : t.amount,
+      Monto: t.amount,
     }));
 
   return (
@@ -219,12 +222,11 @@ export function TransactionsTab({
             ) : (
               sorted.map((t) => {
                 const clientName =
-                  t.project?.client?.name ||
-                  t.service?.client?.name ||
+                  t.presupuesto?.client?.name ||
                   "Sin Entidad";
 
                 const sourceName =
-                  t.project?.name || t.service?.name || "Movimiento Directo";
+                  t.presupuesto?.name || "Movimiento Directo";
 
                 return (
                   <TableRow key={t.id}>
@@ -259,10 +261,10 @@ export function TransactionsTab({
                       {t.description || "-"}
                     </TableCell>
                     <TableCell
-                      className={`font-bold text-right ${t.category === "pago" ? "text-red-600" : "text-green-600"}`}
+                      className={`font-bold text-right ${isExpense(t) ? "text-red-600" : "text-green-600"}`}
                     >
-                      {t.category === "pago" ? "- " : "+ "}$
-                      {t.amount.toFixed(2)}
+                      {isExpense(t) ? "- " : "+ "}$
+                      {Math.abs(t.amount).toFixed(2)}
                     </TableCell>
                     <TableCell>
                       <RowActions row={t} type="transaction" />

@@ -3,8 +3,7 @@
 import { db } from "@/db";
 import {
   clients,
-  projects,
-  pagos,
+  presupuestos,
   transactions,
   recurringServices,
   users,
@@ -14,7 +13,7 @@ import { revalidatePath } from "next/cache";
 import { type InferInsertModel, eq, and, between } from "drizzle-orm";
 
 type NewTransaction = Omit<InferInsertModel<typeof transactions>, "userId">;
-type TransactionCategory = "project" | "recurring" | "pago" | "other";
+type TransactionCategory = "presupuesto" | "recurring" | "other";
 
 async function requireUserId(): Promise<string> {
   const session = await auth();
@@ -80,19 +79,19 @@ export async function updateClientAction(
 export async function deleteClientAction(id: number) {
   try {
     const userId = await requireUserId();
-    // Check if client has ANY associated projects or recurring services
-    const associatedProjects = await db.query.projects.findFirst({
-      where: and(eq(projects.clientId, id), eq(projects.userId, userId)),
+    // Check if client has ANY associated presupuestos or recurring services
+    const associatedPresupuestos = await db.query.presupuestos.findFirst({
+      where: and(eq(presupuestos.clientId, id), eq(presupuestos.userId, userId)),
     });
 
     const associatedServices = await db.query.recurringServices.findFirst({
       where: and(eq(recurringServices.clientId, id), eq(recurringServices.userId, userId)),
     });
 
-    if (associatedProjects || associatedServices) {
+    if (associatedPresupuestos || associatedServices) {
       return {
         success: false,
-        error: "No se puede eliminar. La entidad tiene proyectos o servicios vinculados."
+        error: "No se puede eliminar. La entidad tiene presupuestos o servicios vinculados."
       };
     }
 
@@ -106,22 +105,23 @@ export async function deleteClientAction(id: number) {
   }
 }
 
-export async function createProjectAction(data: {
+export async function createPresupuestoAction(data: {
   name: string;
   clientId: number;
   totalAmount: number;
-  status: string;
+  type: "ingreso" | "egreso";
+  status?: string;
 }) {
   try {
     const userId = await requireUserId();
-    await db.insert(projects).values({
+    await db.insert(presupuestos).values({
       name: data.name,
       clientId: data.clientId,
       totalAmount: data.totalAmount,
-      status: data.status,
+      type: data.type,
+      status: data.status || "activo",
       userId,
     });
-
     revalidatePath("/");
     return { success: true };
   } catch (error) {
@@ -130,11 +130,53 @@ export async function createProjectAction(data: {
   }
 }
 
+async function checkAndFinalizePresupuesto(presupuestoId: number) {
+  const presupuesto = await db.query.presupuestos.findFirst({
+    where: eq(presupuestos.id, presupuestoId),
+    with: { transactions: true },
+  });
+  if (!presupuesto || presupuesto.status === "finalizado") return;
+
+  const totalPaid = presupuesto.transactions.reduce((s, t) => s + Math.abs(t.amount), 0);
+  if (totalPaid >= Math.abs(presupuesto.totalAmount)) {
+    await db.update(presupuestos).set({ status: "finalizado" }).where(eq(presupuestos.id, presupuestoId));
+  }
+}
+
+async function recheckPresupuestoStatus(presupuestoId: number) {
+  const presupuesto = await db.query.presupuestos.findFirst({
+    where: eq(presupuestos.id, presupuestoId),
+    with: { transactions: true },
+  });
+  if (!presupuesto) return;
+
+  const totalPaid = presupuesto.transactions.reduce((s, t) => s + Math.abs(t.amount), 0);
+  const newStatus = totalPaid >= Math.abs(presupuesto.totalAmount) ? "finalizado" : "activo";
+  if (presupuesto.status !== newStatus) {
+    await db.update(presupuestos).set({ status: newStatus }).where(eq(presupuestos.id, presupuestoId));
+  }
+}
+
 export async function createTransactionAction(
   data: Omit<InferInsertModel<typeof transactions>, "userId">,
 ) {
   const userId = await requireUserId();
-  await db.insert(transactions).values({ ...data, userId });
+  let amount = data.amount;
+
+  // Auto-negate amount for egreso presupuestos
+  if (data.presupuestoId) {
+    const linked = await db.query.presupuestos.findFirst({
+      where: eq(presupuestos.id, data.presupuestoId),
+    });
+    if (linked?.type === "egreso" && amount > 0) {
+      amount = -amount;
+    }
+  }
+
+  await db.insert(transactions).values({ ...data, amount, userId });
+  if (data.presupuestoId) {
+    await checkAndFinalizePresupuesto(data.presupuestoId);
+  }
   revalidatePath("/");
   return { success: true };
 }
@@ -165,7 +207,7 @@ export async function createRecurringServiceAction(data: {
   }
 }
 
-export async function createRecurringPaymentFromPagoAction(data: {
+export async function createRecurringFromPresupuestoAction(data: {
   name: string;
   clientId: number;
   amount: number;
@@ -191,10 +233,11 @@ export async function createRecurringPaymentFromPagoAction(data: {
 
 type RawImportData = {
   clients: { name: string }[];
-  projects: {
+  presupuestos: {
     name: string;
     clientName: string;
     totalAmount: number;
+    type: string;
     status?: string;
   }[];
   recurring: {
@@ -202,12 +245,6 @@ type RawImportData = {
     clientName: string;
     amount: number;
     type: string;
-  }[];
-  pagos: {
-    name: string;
-    clientName: string;
-    totalAmount: number;
-    status?: string;
   }[];
   transactions: {
     date: Date;
@@ -241,15 +278,17 @@ export async function bulkSmartImportAction(data: RawImportData) {
         }
       }
 
-      const projectMap = new Map<string, number>();
+      const presupuestoMap = new Map<string, number>();
+      const presupuestoTypeMap = new Map<number, string>();
       const serviceMap = new Map<string, number>();
 
-      const existingProjects = await tx.query.projects.findMany({
-        where: eq(projects.userId, userId),
+      const existingPresupuestos = await tx.query.presupuestos.findMany({
+        where: eq(presupuestos.userId, userId),
       });
-      existingProjects.forEach((p) =>
-        projectMap.set(p.name.toLowerCase(), p.id),
-      );
+      existingPresupuestos.forEach((p) => {
+        presupuestoMap.set(p.name.toLowerCase(), p.id);
+        presupuestoTypeMap.set(p.id, p.type);
+      });
 
       const existingServices = await tx.query.recurringServices.findMany({
         where: eq(recurringServices.userId, userId),
@@ -258,22 +297,24 @@ export async function bulkSmartImportAction(data: RawImportData) {
         serviceMap.set(s.name.toLowerCase(), s.id),
       );
 
-      for (const p of data.projects) {
+      for (const p of data.presupuestos || []) {
         const clientId = clientMap.get(p.clientName.toLowerCase());
-        const normalizedProjName = p.name.toLowerCase();
+        const normalizedName = p.name.toLowerCase();
 
-        if (clientId && !projectMap.has(normalizedProjName)) {
+        if (clientId && !presupuestoMap.has(normalizedName)) {
           const res = await tx
-            .insert(projects)
+            .insert(presupuestos)
             .values({
               name: p.name,
               clientId,
               totalAmount: p.totalAmount,
-              status: p.status || "en_desarrollo",
+              type: (p.type === "ingreso" || p.type === "egreso") ? p.type : "ingreso",
+              status: p.status || "activo",
               userId,
             })
-            .returning({ id: projects.id });
-          projectMap.set(normalizedProjName, res[0].id);
+            .returning({ id: presupuestos.id });
+          presupuestoMap.set(normalizedName, res[0].id);
+          presupuestoTypeMap.set(res[0].id, (p.type === "ingreso" || p.type === "egreso") ? p.type : "ingreso");
         }
       }
 
@@ -296,58 +337,36 @@ export async function bulkSmartImportAction(data: RawImportData) {
         }
       }
 
-      const pagoMap = new Map<string, number>();
-
-      const existingPagos = await tx.query.pagos.findMany({
-        where: eq(pagos.userId, userId),
-      });
-      existingPagos.forEach((p) =>
-        pagoMap.set(p.name.toLowerCase(), p.id),
-      );
-
-      for (const p of data.pagos || []) {
-        const clientId = clientMap.get(p.clientName.toLowerCase());
-        const normalizedPagoName = p.name.toLowerCase();
-
-        if (clientId && !pagoMap.has(normalizedPagoName)) {
-          const res = await tx
-            .insert(pagos)
-            .values({
-              name: p.name,
-              clientId,
-              totalAmount: p.totalAmount,
-              status: p.status || "pendiente",
-              userId,
-            })
-            .returning({ id: pagos.id });
-          pagoMap.set(normalizedPagoName, res[0].id);
-        }
-      }
-
       const transactionsToInsert = data.transactions.map(
         (t) => {
-          let projectId = null;
-          let pagoId = null;
+          let presupuestoId = null;
           let serviceId = null;
 
           if (t.targetName) {
             const target = t.targetName.toLowerCase();
-            if (projectMap.has(target))
-              projectId = projectMap.get(target) ?? null;
-            else if (pagoMap.has(target))
-              pagoId = pagoMap.get(target) ?? null;
+            if (presupuestoMap.has(target))
+              presupuestoId = presupuestoMap.get(target) ?? null;
             else if (serviceMap.has(target))
               serviceId = serviceMap.get(target) ?? null;
+          }
+
+          const category = (t.category === "project" || t.category === "pago")
+            ? "presupuesto"
+            : t.category;
+
+          // Auto-negate for egreso presupuestos
+          let amount = t.amount;
+          if (presupuestoId && presupuestoTypeMap.get(presupuestoId) === "egreso" && amount > 0) {
+            amount = -amount;
           }
 
           return {
             date: t.date,
             imputedDate: t.imputedDate,
-            amount: t.amount,
-            category: t.category as TransactionCategory,
+            amount,
+            category: category as TransactionCategory,
             description: t.description,
-            projectId: projectId,
-            pagoId: pagoId,
+            presupuestoId: presupuestoId,
             serviceId: serviceId,
             status: "paid",
             userId,
@@ -359,6 +378,19 @@ export async function bulkSmartImportAction(data: RawImportData) {
         await tx.insert(transactions).values(transactionsToInsert);
       }
     });
+
+    // Check all linked presupuestos for auto-finalization
+    const allPresupuestos = await db.query.presupuestos.findMany({
+      where: eq(presupuestos.userId, userId),
+      with: { transactions: true },
+    });
+    for (const p of allPresupuestos) {
+      if (p.status === "finalizado") continue;
+      const totalPaid = p.transactions.reduce((s, t) => s + Math.abs(t.amount), 0);
+      if (totalPaid >= Math.abs(p.totalAmount)) {
+        await db.update(presupuestos).set({ status: "finalizado" }).where(eq(presupuestos.id, p.id));
+      }
+    }
 
     revalidatePath("/");
     return { success: true };
@@ -378,12 +410,12 @@ export async function updateTransactionAction(
   return { success: true };
 }
 
-export async function updateProjectAction(
+export async function updatePresupuestoAction(
   id: number,
-  data: Partial<InferInsertModel<typeof projects>>,
+  data: Partial<InferInsertModel<typeof presupuestos>>,
 ) {
   const userId = await requireUserId();
-  await db.update(projects).set(data).where(and(eq(projects.id, id), eq(projects.userId, userId)));
+  await db.update(presupuestos).set(data).where(and(eq(presupuestos.id, id), eq(presupuestos.userId, userId)));
   revalidatePath("/");
   return { success: true };
 }
@@ -404,7 +436,15 @@ export async function updateRecurringServiceAction(
 export async function deleteTransactionAction(id: number) {
   try {
     const userId = await requireUserId();
+    // Get the transaction before deleting to check presupuesto link
+    const txn = await db.query.transactions.findFirst({
+      where: and(eq(transactions.id, id), eq(transactions.userId, userId)),
+    });
     await db.delete(transactions).where(and(eq(transactions.id, id), eq(transactions.userId, userId)));
+    // Re-check presupuesto status after deletion
+    if (txn?.presupuestoId) {
+      await recheckPresupuestoStatus(txn.presupuestoId);
+    }
     revalidatePath("/");
     return { success: true };
   } catch (error) {
@@ -413,75 +453,21 @@ export async function deleteTransactionAction(id: number) {
   }
 }
 
-export async function deleteProjectAction(id: number) {
+export async function deletePresupuestoAction(id: number) {
   try {
     const userId = await requireUserId();
     await db.transaction(async (tx) => {
       await tx
         .update(transactions)
-        .set({ projectId: null })
-        .where(eq(transactions.projectId, id));
-
-      await tx.delete(projects).where(and(eq(projects.id, id), eq(projects.userId, userId)));
-    });
-
-    revalidatePath("/");
-    return { success: true };
-  } catch (error) {
-    console.error("Error deleting project:", error);
-    return { success: false, error: "No se pudo eliminar el proyecto" };
-  }
-}
-
-export async function createPagoAction(data: {
-  name: string;
-  clientId: number;
-  totalAmount: number;
-  status: string;
-}) {
-  try {
-    const userId = await requireUserId();
-    await db.insert(pagos).values({
-      name: data.name,
-      clientId: data.clientId,
-      totalAmount: data.totalAmount,
-      status: data.status,
-      userId,
+        .set({ presupuestoId: null })
+        .where(eq(transactions.presupuestoId, id));
+      await tx.delete(presupuestos).where(and(eq(presupuestos.id, id), eq(presupuestos.userId, userId)));
     });
     revalidatePath("/");
     return { success: true };
   } catch (error) {
-    console.error(error);
-    return { success: false };
-  }
-}
-
-export async function updatePagoAction(
-  id: number,
-  data: Partial<InferInsertModel<typeof pagos>>,
-) {
-  const userId = await requireUserId();
-  await db.update(pagos).set(data).where(and(eq(pagos.id, id), eq(pagos.userId, userId)));
-  revalidatePath("/");
-  return { success: true };
-}
-
-export async function deletePagoAction(id: number) {
-  try {
-    const userId = await requireUserId();
-    await db.transaction(async (tx) => {
-      await tx
-        .update(transactions)
-        .set({ pagoId: null })
-        .where(eq(transactions.pagoId, id));
-
-      await tx.delete(pagos).where(and(eq(pagos.id, id), eq(pagos.userId, userId)));
-    });
-    revalidatePath("/");
-    return { success: true };
-  } catch (error) {
-    console.error("Error deleting pago:", error);
-    return { success: false, error: "No se pudo eliminar el pago" };
+    console.error("Error deleting presupuesto:", error);
+    return { success: false, error: "No se pudo eliminar el presupuesto" };
   }
 }
 

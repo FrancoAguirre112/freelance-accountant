@@ -28,8 +28,7 @@ const montserrat = Montserrat({ subsets: ["latin"], weight: "900" });
 const TAB_LABELS: Record<string, string> = {
   overview: "Dashboard",
   transactions: "Movimientos",
-  projects: "Proyectos",
-  pagos: "Pagos",
+  presupuestos: "Presupuestos",
   maintenance: "Recurrentes",
 };
 

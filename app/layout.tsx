@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
+import { UpdateNotification } from "@/components/update-notification";
 import { ThemeProvider } from "@/components/theme-provider";
 import { SessionProvider } from "next-auth/react";
 
@@ -27,6 +28,7 @@ export default function RootLayout({
           <ThemeProvider>
             <main>{children}</main>
             <Toaster position="top-center" richColors />
+            <UpdateNotification />
           </ThemeProvider>
         </SessionProvider>
       </body>

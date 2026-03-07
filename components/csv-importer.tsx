@@ -45,13 +45,13 @@ export function CSVImporter() {
       "# El sistema vincula entidades por NOMBRE (no por ID).",
       "#",
       "# COLUMNAS:",
-      "#   TipoDato      — Tipo de fila: cliente | proyecto | recurrente | pago | movimiento",
+      "#   TipoDato      — Tipo de fila: cliente | presupuesto | recurrente | movimiento",
       "#   Nombre        — Nombre del elemento (obligatorio excepto en algunos movimientos)",
-      "#   Vinculo       — Nombre de la Entidad asociada (para proyecto/recurrente/pago)",
+      "#   Vinculo       — Nombre de la Entidad asociada (para presupuesto/recurrente)",
       "#   Monto         — Valor numérico en USD (ej: 1500.00)",
       "#   Fecha         — Fecha real del movimiento (YYYY-MM-DD). Solo para movimientos",
       "#   FechaImputada — Fecha a la que se imputa el movimiento (YYYY-MM-DD). Solo para movimientos",
-      "#   Categoria     — Categoría del movimiento: project | recurring | pago | other",
+      "#   Categoria     — Categoría del movimiento: presupuesto | recurring | other",
       "#   Concepto      — Descripción o concepto del movimiento",
       "#   Estado        — Estado o subtipo según el TipoDato (ver detalle abajo)",
       "#",
@@ -64,10 +64,11 @@ export function CSVImporter() {
       "#    Ejemplo: cliente,Mermoz,,,,,,,",
       "#    Nota: Se crea si no existe. Si ya existe se reutiliza.",
       "#",
-      "# 2. PROYECTO",
+      "# 2. PRESUPUESTO",
       "#    Columnas usadas: Nombre, Vinculo (entidad), Monto, Estado",
-      "#    Estado: en_desarrollo | finalizado | pausado (default: en_desarrollo)",
-      "#    Ejemplo: proyecto,Web Mermoz,Mermoz,1500.00,,,,,en_desarrollo",
+      "#    Estado: ingreso | egreso (default: ingreso)",
+      "#    Ejemplo ingreso: presupuesto,Web Mermoz,Mermoz,1500.00,,,,,ingreso",
+      "#    Ejemplo egreso:  presupuesto,Licencia Anual,Proveedor X,120.00,,,,,egreso",
       "#    Nota: Vinculo debe ser el nombre exacto de una entidad (existente o definida arriba).",
       "#",
       "# 3. RECURRENTE (Operación Recurrente)",
@@ -78,22 +79,17 @@ export function CSVImporter() {
       "#    Ejemplo ingreso: recurrente,Mantenimiento Web,Mermoz,50.00,,,,,service",
       "#    Ejemplo egreso:  recurrente,Hosting Mensual,Proveedor Cloud,15.00,,,,,payment",
       "#",
-      "# 4. PAGO (Cuenta por pagar — no recurrente)",
-      "#    Columnas usadas: Nombre, Vinculo (entidad), Monto, Estado",
-      "#    Estado: pendiente | pago_parcial | saldado (default: pendiente)",
-      "#    Ejemplo: pago,Licencia Anual,Proveedor X,120.00,,,,,pendiente",
-      "#",
-      "# 5. MOVIMIENTO (Transacción)",
+      "# 4. MOVIMIENTO (Transacción)",
       "#    Columnas usadas: Nombre (opcional), Monto, Fecha, FechaImputada, Categoria, Concepto",
-      "#    Categoria: project | recurring | pago | other",
-      "#    Nombre: Nombre del Proyecto/Recurrente/Pago al que vincular (opcional).",
-      "#            El sistema busca automáticamente en proyectos, pagos y recurrentes.",
+      "#    Categoria: presupuesto | recurring | other",
+      "#    Nombre: Nombre del Presupuesto/Recurrente al que vincular (opcional).",
+      "#            El sistema busca automáticamente en presupuestos y recurrentes.",
       "#    FechaImputada: Si se omite, se usa la Fecha. Útil para imputar a otro mes.",
-      "#    Ejemplo vinculado:  movimiento,Web Mermoz,,500.00,2024-03-01,2024-03-01,project,Pago Hito 1,",
+      "#    Ejemplo vinculado:  movimiento,Web Mermoz,,500.00,2024-03-01,2024-03-01,presupuesto,Pago Hito 1,",
       "#    Ejemplo libre:      movimiento,,,100.00,2024-03-05,,other,Gasto vario,",
       "#",
       "# ============================================================",
-      "# ORDEN RECOMENDADO: clientes → proyectos → recurrentes → pagos → movimientos",
+      "# ORDEN RECOMENDADO: clientes → presupuestos → recurrentes → movimientos",
       "# (para que las entidades existan antes de vincularlas)",
       "# ============================================================",
       "#",
@@ -101,15 +97,14 @@ export function CSVImporter() {
       "# --- Entidades ---",
       "cliente,Mermoz,,,,,,,",
       "cliente,Proveedor Cloud,,,,,,,",
-      "# --- Proyectos ---",
-      "proyecto,Web Mermoz,Mermoz,1500.00,,,,,en_desarrollo",
+      "# --- Presupuestos ---",
+      "presupuesto,Web Mermoz,Mermoz,1500.00,,,,,ingreso",
+      "presupuesto,Licencia Anual,Proveedor Cloud,120.00,,,,,egreso",
       "# --- Operaciones Recurrentes ---",
       "recurrente,Mantenimiento Web,Mermoz,50.00,,,,,service",
       "recurrente,Hosting Mensual,Proveedor Cloud,15.00,,,,,payment",
-      "# --- Pagos ---",
-      "pago,Licencia Anual,Proveedor Cloud,120.00,,,,,pendiente",
       "# --- Movimientos ---",
-      "movimiento,Web Mermoz,,500.00,2024-03-01,2024-03-01,project,Pago Hito 1,",
+      "movimiento,Web Mermoz,,500.00,2024-03-01,2024-03-01,presupuesto,Pago Hito 1,",
       "movimiento,Mantenimiento Web,,50.00,2024-03-01,2024-03-01,recurring,Cobro marzo,",
       "movimiento,,,100.00,2024-03-05,,other,Gasto vario,",
     ].join("\n");
@@ -137,10 +132,11 @@ export function CSVImporter() {
         // Nota: Estos tipos coinciden con lo que espera bulkSmartImportAction
         const payload = {
           clients: [] as { name: string }[],
-          projects: [] as {
+          presupuestos: [] as {
             name: string;
             clientName: string;
             totalAmount: number;
+            type: string;
             status: string;
           }[],
           recurring: [] as {
@@ -148,12 +144,6 @@ export function CSVImporter() {
             clientName: string;
             amount: number;
             type: string;
-          }[],
-          pagos: [] as {
-            name: string;
-            clientName: string;
-            totalAmount: number;
-            status: string;
           }[],
           transactions: [] as {
             date: Date;
@@ -182,13 +172,14 @@ export function CSVImporter() {
               if (name) payload.clients.push({ name });
               break;
 
-            case "proyecto":
+            case "presupuesto":
               if (name && link) {
-                payload.projects.push({
+                payload.presupuestos.push({
                   name,
                   clientName: link,
                   totalAmount: amount,
-                  status: row.Estado || "en_desarrollo",
+                  type: (row.Estado || "ingreso").toLowerCase().trim() === "egreso" ? "egreso" : "ingreso",
+                  status: "activo",
                 });
               }
               break;
@@ -201,17 +192,6 @@ export function CSVImporter() {
                   clientName: link,
                   amount,
                   type: recType === "payment" ? "payment" : "service",
-                });
-              }
-              break;
-
-            case "pago":
-              if (name && link) {
-                payload.pagos.push({
-                  name,
-                  clientName: link,
-                  totalAmount: amount,
-                  status: row.Estado || "pendiente",
                 });
               }
               break;
@@ -268,7 +248,7 @@ export function CSVImporter() {
           <DialogTitle>Importación Masiva Inteligente</DialogTitle>
           <DialogDescription>
             Sube un CSV. El sistema resolverá y vinculará automáticamente
-            Entidades, Proyectos y Pagos por nombre.
+            Entidades y Presupuestos por nombre.
           </DialogDescription>
         </DialogHeader>
 
@@ -282,20 +262,16 @@ export function CSVImporter() {
                 <strong>Entidades:</strong> Solo necesitan Nombre.
               </li>
               <li>
-                <strong>Proyectos:</strong> Vinculo = Nombre de la Entidad.
-                Estado: en_desarrollo | finalizado | pausado.
+                <strong>Presupuestos:</strong> Vinculo = Nombre de la Entidad.
+                Estado: ingreso | egreso.
               </li>
               <li>
                 <strong>Recurrentes:</strong> Vinculo = Entidad. Estado: service
                 (ingreso) | payment (egreso).
               </li>
               <li>
-                <strong>Pagos:</strong> Vinculo = Entidad. Estado: pendiente |
-                pago_parcial | saldado.
-              </li>
-              <li>
-                <strong>Movimientos:</strong> Nombre = Proyecto/Recurrente/Pago
-                a vincular (opcional). Categoría: project | recurring | pago |
+                <strong>Movimientos:</strong> Nombre = Presupuesto/Recurrente
+                a vincular (opcional). Categoría: presupuesto | recurring |
                 other.
               </li>
             </ul>

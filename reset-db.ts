@@ -17,7 +17,7 @@ async function main() {
 
   // 2. Importación DINÁMICA (Aquí ya existen las variables de entorno)
   const { db } = await import("@/db");
-  const { transactions, projects, recurringServices, clients } =
+  const { transactions, presupuestos, recurringServices, clients } =
     await import("@/db/schema");
   const { sql } = await import("drizzle-orm");
 
@@ -26,8 +26,8 @@ async function main() {
     console.log(" - Borrando Transacciones...");
     await db.delete(transactions);
 
-    console.log(" - Borrando Proyectos...");
-    await db.delete(projects);
+    console.log(" - Borrando Presupuestos...");
+    await db.delete(presupuestos);
 
     console.log(" - Borrando Servicios Recurrentes...");
     await db.delete(recurringServices);

@@ -30,13 +30,11 @@ import { type InferSelectModel } from "drizzle-orm";
 
 // 1. Tipado base de la base de datos
 type Transaction = InferSelectModel<typeof transactions>;
-type CategoryKey = "project" | "recurring" | "pago" | "other";
-
 interface BarDataRow {
   month: string;
-  project: number;
+  ingreso: number;
   recurring: number;
-  pago: number;
+  egreso: number;
   other: number;
 }
 
@@ -47,9 +45,9 @@ interface PieDataRow {
 }
 
 const chartConfig = {
-  project: { label: "Proyecto", color: "#4285F4" },
+  ingreso: { label: "Ingreso", color: "#4285F4" },
   recurring: { label: "Recurrente", color: "#7E57C2" },
-  pago: { label: "Pago", color: "#E53935" },
+  egreso: { label: "Egreso", color: "#E53935" },
   other: { label: "Otro", color: "#9AA0A6" },
 } satisfies ChartConfig;
 
@@ -64,16 +62,20 @@ export function DashboardTab({ data }: { data: Transaction[] }) {
       if (!monthsMap[monthName]) {
         monthsMap[monthName] = {
           month: monthName,
-          project: 0,
+          ingreso: 0,
           recurring: 0,
-          pago: 0,
+          egreso: 0,
           other: 0,
         };
       }
 
-      const cat = t.category as CategoryKey;
-      if (cat in monthsMap[monthName]) {
-        monthsMap[monthName][cat] += cat === "pago" ? -t.amount : t.amount;
+      if (t.category === "presupuesto") {
+        if (t.amount >= 0) monthsMap[monthName].ingreso += t.amount;
+        else monthsMap[monthName].egreso += t.amount;
+      } else if (t.category === "recurring") {
+        monthsMap[monthName].recurring += t.amount;
+      } else {
+        monthsMap[monthName].other += t.amount;
       }
     });
 
@@ -84,36 +86,23 @@ export function DashboardTab({ data }: { data: Transaction[] }) {
 
   // Procesamiento de torta con tipado estricto
   const pieData = useMemo<PieDataRow[]>(() => {
-    const totals: Record<CategoryKey, number> = {
-      project: 0,
-      recurring: 0,
-      pago: 0,
-      other: 0,
-    };
+    const totals: Record<string, number> = { ingreso: 0, recurring: 0, egreso: 0, other: 0 };
 
     data.forEach((t) => {
-      const cat = t.category as CategoryKey;
-      if (totals[cat] !== undefined) {
-        totals[cat] += t.amount;
+      if (t.category === "presupuesto") {
+        if (t.amount >= 0) totals.ingreso += t.amount;
+        else totals.egreso += Math.abs(t.amount);
+      } else if (t.category === "recurring") {
+        totals.recurring += t.amount;
+      } else {
+        totals.other += t.amount;
       }
     });
 
     return [
-      {
-        name: "Proyectos",
-        value: totals.project,
-        fill: chartConfig.project.color,
-      },
-      {
-        name: "Recurrente",
-        value: totals.recurring,
-        fill: chartConfig.recurring.color,
-      },
-      {
-        name: "Pagos",
-        value: totals.pago,
-        fill: chartConfig.pago.color,
-      },
+      { name: "Ingresos", value: totals.ingreso, fill: chartConfig.ingreso.color },
+      { name: "Recurrente", value: totals.recurring, fill: chartConfig.recurring.color },
+      { name: "Egresos", value: totals.egreso, fill: chartConfig.egreso.color },
       { name: "Otros", value: totals.other, fill: chartConfig.other.color },
     ].filter((item) => item.value > 0);
   }, [data]);
@@ -134,8 +123,8 @@ export function DashboardTab({ data }: { data: Transaction[] }) {
               <XAxis dataKey="month" tickLine={false} axisLine={false} />
               <ChartTooltip content={<ChartTooltipContent />} />
               <Bar
-                dataKey="project"
-                fill={chartConfig.project.color}
+                dataKey="ingreso"
+                fill={chartConfig.ingreso.color}
                 stackId="a"
               />
               <Bar
@@ -144,8 +133,8 @@ export function DashboardTab({ data }: { data: Transaction[] }) {
                 stackId="a"
               />
               <Bar
-                dataKey="pago"
-                fill={chartConfig.pago.color}
+                dataKey="egreso"
+                fill={chartConfig.egreso.color}
                 stackId="b"
               />
               <Bar

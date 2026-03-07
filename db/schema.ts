@@ -57,26 +57,16 @@ export const clients = sqliteTable("clients", {
   index("clients_user_id_idx").on(table.userId),
 ]);
 
-export const projects = sqliteTable("projects", {
+export const presupuestos = sqliteTable("presupuestos", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
   clientId: integer("client_id").references(() => clients.id),
   name: text("name").notNull(),
   totalAmount: real("total_amount").notNull(),
-  status: text("status").default("en_desarrollo"),
+  type: text("type", { enum: ["ingreso", "egreso"] }).notNull(),
+  status: text("status").default("activo"),
 }, (table) => [
-  index("projects_user_id_idx").on(table.userId),
-]);
-
-export const pagos = sqliteTable("pagos", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
-  clientId: integer("client_id").references(() => clients.id),
-  name: text("name").notNull(),
-  totalAmount: real("total_amount").notNull(),
-  status: text("status").default("pendiente"),
-}, (table) => [
-  index("pagos_user_id_idx").on(table.userId),
+  index("presupuestos_user_id_idx").on(table.userId),
 ]);
 
 export const recurringServices = sqliteTable("recurring_services", {
@@ -97,11 +87,10 @@ export const transactions = sqliteTable("transactions", {
   imputedDate: integer("imputed_date", { mode: "timestamp" }),
   amount: real("amount").notNull(),
   category: text("category", {
-    enum: ["project", "recurring", "pago", "other"],
+    enum: ["presupuesto", "recurring", "other"],
   }).notNull(),
   description: text("description"),
-  projectId: integer("project_id").references(() => projects.id),
-  pagoId: integer("pago_id").references(() => pagos.id),
+  presupuestoId: integer("presupuesto_id").references(() => presupuestos.id),
   serviceId: integer("service_id").references(() => recurringServices.id),
   status: text("status").default("paid"),
 }, (table) => [
@@ -115,32 +104,21 @@ export const usersRelations = relations(users, ({ many }) => ({
   accounts: many(accounts),
   sessions: many(sessions),
   clients: many(clients),
-  projects: many(projects),
-  pagos: many(pagos),
+  presupuestos: many(presupuestos),
   transactions: many(transactions),
   recurringServices: many(recurringServices),
 }));
 
 export const clientsRelations = relations(clients, ({ one, many }) => ({
   user: one(users, { fields: [clients.userId], references: [users.id] }),
-  projects: many(projects),
-  pagos: many(pagos),
+  presupuestos: many(presupuestos),
   services: many(recurringServices),
 }));
 
-export const projectsRelations = relations(projects, ({ one, many }) => ({
-  user: one(users, { fields: [projects.userId], references: [users.id] }),
+export const presupuestosRelations = relations(presupuestos, ({ one, many }) => ({
+  user: one(users, { fields: [presupuestos.userId], references: [users.id] }),
   client: one(clients, {
-    fields: [projects.clientId],
-    references: [clients.id],
-  }),
-  transactions: many(transactions),
-}));
-
-export const pagosRelations = relations(pagos, ({ one, many }) => ({
-  user: one(users, { fields: [pagos.userId], references: [users.id] }),
-  client: one(clients, {
-    fields: [pagos.clientId],
+    fields: [presupuestos.clientId],
     references: [clients.id],
   }),
   transactions: many(transactions),
@@ -159,13 +137,9 @@ export const recurringServicesRelations = relations(
 
 export const transactionsRelations = relations(transactions, ({ one }) => ({
   user: one(users, { fields: [transactions.userId], references: [users.id] }),
-  project: one(projects, {
-    fields: [transactions.projectId],
-    references: [projects.id],
-  }),
-  pago: one(pagos, {
-    fields: [transactions.pagoId],
-    references: [pagos.id],
+  presupuesto: one(presupuestos, {
+    fields: [transactions.presupuestoId],
+    references: [presupuestos.id],
   }),
   service: one(recurringServices, {
     fields: [transactions.serviceId],

@@ -2,7 +2,7 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
-import { users, clients, projects, recurringServices, transactions } from "../db/schema";
+import { users, clients, presupuestos, recurringServices, transactions } from "../db/schema";
 import { isNull } from "drizzle-orm";
 import * as schema from "../db/schema";
 
@@ -34,13 +34,13 @@ async function main() {
     .returning({ id: clients.id, name: clients.name });
   console.log(`Updated ${updatedClients.length} clients`);
 
-  // Update projects with no userId
-  const updatedProjects = await db
-    .update(projects)
+  // Update presupuestos with no userId
+  const updatedPresupuestos = await db
+    .update(presupuestos)
     .set({ userId })
-    .where(isNull(projects.userId))
-    .returning({ id: projects.id, name: projects.name });
-  console.log(`Updated ${updatedProjects.length} projects`);
+    .where(isNull(presupuestos.userId))
+    .returning({ id: presupuestos.id, name: presupuestos.name });
+  console.log(`Updated ${updatedPresupuestos.length} presupuestos`);
 
   // Update recurring services with no userId
   const updatedServices = await db

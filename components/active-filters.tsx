@@ -5,17 +5,17 @@ import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { type InferSelectModel } from "drizzle-orm";
-import { clients, projects } from "@/db/schema";
+import { clients, presupuestos } from "@/db/schema";
 
 type Client = InferSelectModel<typeof clients>;
-type Project = InferSelectModel<typeof projects>;
+type Presupuesto = InferSelectModel<typeof presupuestos>;
 
 interface ActiveFiltersProps {
   clients: Client[];
-  projects: Project[];
+  presupuestos: Presupuesto[];
 }
 
-export function ActiveFilters({ clients, projects }: ActiveFiltersProps) {
+export function ActiveFilters({ clients, presupuestos }: ActiveFiltersProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -27,16 +27,15 @@ export function ActiveFilters({ clients, projects }: ActiveFiltersProps) {
         const client = clients.find((c) => c.id.toString() === value);
         return client ? `Entidad: ${client.name}` : `Entidad ID: ${value}`;
 
-      case "projectId":
-        const project = projects.find((p) => p.id.toString() === value);
-        return project ? `Proyecto: ${project.name}` : `Proyecto ID: ${value}`;
+      case "presupuestoId":
+        const presupuesto = presupuestos.find((p) => p.id.toString() === value);
+        return presupuesto ? `Presupuesto: ${presupuesto.name}` : `Presupuesto ID: ${value}`;
 
       case "category":
         // Traducir valores técnicos a español visual
         const catMap: Record<string, string> = {
-          project: "Proyecto",
+          presupuesto: "Presupuesto",
           recurring: "Recurrente",
-          pago: "Pago",
           other: "Otro",
         };
         return `Categoría: ${catMap[value] || value}`;
@@ -46,7 +45,7 @@ export function ActiveFilters({ clients, projects }: ActiveFiltersProps) {
     }
   };
 
-  const filterKeys = ["clientId", "projectId", "category"];
+  const filterKeys = ["clientId", "presupuestoId", "category"];
 
   // Generamos la lista de filtros activos con sus etiquetas legibles
   const activeFilters = filterKeys

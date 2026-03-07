@@ -1,0 +1,29 @@
+[
+  {
+    "version": "0.4.0",
+    "date": "2026-03-07",
+    "changes": [
+      "Proyectos y Pagos se unificaron en una sola pestaña: Presupuestos",
+      "Cada presupuesto ahora se distingue como Ingreso (verde) o Egreso (rojo)",
+      "Nuevo filtro por tipo: ver solo Ingresos, solo Egresos o Todos",
+      "Los movimientos ahora se vinculan a Presupuestos en lugar de Proyectos/Pagos",
+      "Importación CSV actualizada con el nuevo formato unificado",
+      "Todos los datos existentes fueron migrados automáticamente"
+    ]
+  },
+  {
+    "version": "0.3.0",
+    "date": "2026-03-07",
+    "changes": [
+      "Nuevo sistema de notificación de actualizaciones",
+      "Mejoras en el rendimiento general de la aplicación"
+    ]
+  },
+  {
+    "version": "0.2.0",
+    "date": "2026-03-07",
+    "changes": [
+      "Se añadió la funcionalidad de notificación de actualizaciones"
+    ]
+  }
+]

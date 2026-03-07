@@ -7,16 +7,16 @@ import { ActiveTabProvider } from "@/components/active-tab-context";
 import { SyncedTabs } from "@/components/synced-tabs";
 import { UserMenu } from "@/components/user-menu";
 import { db } from "@/db";
-import { clients, projects, pagos, recurringServices, transactions } from "@/db/schema";
+import { clients, presupuestos, recurringServices, transactions } from "@/db/schema";
 import { eq, and, between, desc } from "drizzle-orm";
-import { ProjectsTab } from "@/components/projects-tab";
-import { PagosTab } from "@/components/pagos-tab";
+import { PresupuestosTab } from "@/components/presupuestos-tab";
 import { MaintenanceTab } from "@/components/maintenance-tab";
 import { AddDataDialog } from "@/components/add-data-dialog";
 import { ClientsDatabaseDialog } from "@/components/clients-database-dialog";
 import Image from "next/image";
 import { Montserrat } from "next/font/google";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { ChangelogButton } from "@/components/update-notification";
 import { MobileNav } from "@/components/mobile-nav";
 
 
@@ -41,19 +41,12 @@ export default async function DashboardPage({
   const session = await auth();
   const userId = session!.user.id;
 
-  const [allClients, allProjects, allPagos, allServices] = await Promise.all([
+  const [allClients, allPresupuestos, allServices] = await Promise.all([
     db.query.clients.findMany({
       where: eq(clients.userId, userId),
     }),
-    db.query.projects.findMany({
-      where: eq(projects.userId, userId),
-      with: {
-        client: true,
-        transactions: true,
-      },
-    }),
-    db.query.pagos.findMany({
-      where: eq(pagos.userId, userId),
+    db.query.presupuestos.findMany({
+      where: eq(presupuestos.userId, userId),
       with: {
         client: true,
         transactions: true,
@@ -68,8 +61,8 @@ export default async function DashboardPage({
   ]);
 
   const activeClients = allClients.filter((c) => c.status === "active");
-  const activeProjects = allProjects.filter(
-    (p) => p.status === "en_desarrollo",
+  const activePresupuestos = allPresupuestos.filter(
+    (p) => p.status === "activo",
   );
   const activeServices = allServices;
 
@@ -100,7 +93,7 @@ export default async function DashboardPage({
       between(transactions.date, queryFrom, queryTo),
     ),
     with: {
-      project: { with: { client: true } },
+      presupuesto: { with: { client: true } },
       service: { with: { client: true } },
     },
     orderBy: [desc(transactions.date)],
@@ -152,12 +145,12 @@ export default async function DashboardPage({
         <div className="flex items-center gap-2 w-auto overflow-x-auto">
           <AddDataDialog
             clientsData={activeClients}
-            projectsData={activeProjects}
-            pagosData={allPagos}
+            presupuestosData={activePresupuestos}
             servicesData={activeServices}
           />
           <ClientsDatabaseDialog clients={allClients} />
           <div className="mx-1 bg-border w-[1px] h-8 shrink-0" />
+          <ChangelogButton />
           <ThemeToggle />
           <UserMenu />
         </div>
@@ -168,8 +161,7 @@ export default async function DashboardPage({
           <div className="hidden md:flex bg-muted p-1 rounded-md overflow-x-auto w-auto whitespace-nowrap">
             <TabsTrigger value="overview">Dashboard</TabsTrigger>
             <TabsTrigger value="transactions">Movimientos</TabsTrigger>
-            <TabsTrigger value="projects">Proyectos</TabsTrigger>
-            <TabsTrigger value="pagos">Pagos</TabsTrigger>
+            <TabsTrigger value="presupuestos">Presupuestos</TabsTrigger>
             <TabsTrigger value="maintenance">Recurrentes</TabsTrigger>
           </div>
           <DateRangePicker />
@@ -188,12 +180,8 @@ export default async function DashboardPage({
           />
         </TabsContent>
 
-        <TabsContent value="projects">
-          <ProjectsTab projects={allProjects} clients={allClients} />
-        </TabsContent>
-
-        <TabsContent value="pagos">
-          <PagosTab pagos={allPagos} clients={allClients} />
+        <TabsContent value="presupuestos">
+          <PresupuestosTab presupuestos={allPresupuestos} clients={allClients} />
         </TabsContent>
 
         <TabsContent value="maintenance">
@@ -211,8 +199,7 @@ export default async function DashboardPage({
       <div className="fixed bottom-6 right-6 z-50 md:hidden">
         <AddDataDialog
           clientsData={activeClients}
-          projectsData={activeProjects}
-          pagosData={allPagos}
+          presupuestosData={activePresupuestos}
           servicesData={activeServices}
           fabMode
         />

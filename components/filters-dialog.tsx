@@ -22,18 +22,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { type InferSelectModel } from "drizzle-orm";
-import { clients, projects } from "@/db/schema";
+import { clients, presupuestos } from "@/db/schema";
 import { SearchableFilterSelect } from "./searchable-filter-select"; // Importamos el nuevo componente
 
 type Client = InferSelectModel<typeof clients>;
-type Project = InferSelectModel<typeof projects>;
+type Presupuesto = InferSelectModel<typeof presupuestos>;
 
 interface FiltersDialogProps {
   clients: Client[];
-  projects: Project[];
+  presupuestos: Presupuesto[];
 }
 
-export function FiltersDialog({ clients, projects }: FiltersDialogProps) {
+export function FiltersDialog({ clients, presupuestos }: FiltersDialogProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [open, setOpen] = React.useState(false);
@@ -41,8 +41,8 @@ export function FiltersDialog({ clients, projects }: FiltersDialogProps) {
   const [clientId, setClientId] = React.useState(
     searchParams.get("clientId") || "all",
   );
-  const [projectId, setProjectId] = React.useState(
-    searchParams.get("projectId") || "all",
+  const [presupuestoId, setPresupuestoId] = React.useState(
+    searchParams.get("presupuestoId") || "all",
   );
   const [category, setCategory] = React.useState(
     searchParams.get("category") || "all",
@@ -53,8 +53,8 @@ export function FiltersDialog({ clients, projects }: FiltersDialogProps) {
     if (clientId && clientId !== "all") params.set("clientId", clientId);
     else params.delete("clientId");
 
-    if (projectId && projectId !== "all") params.set("projectId", projectId);
-    else params.delete("projectId");
+    if (presupuestoId && presupuestoId !== "all") params.set("presupuestoId", presupuestoId);
+    else params.delete("presupuestoId");
 
     if (category && category !== "all") params.set("category", category);
     else params.delete("category");
@@ -65,7 +65,7 @@ export function FiltersDialog({ clients, projects }: FiltersDialogProps) {
 
   const handleClear = () => {
     setClientId("all");
-    setProjectId("all");
+    setPresupuestoId("all");
     setCategory("all");
   };
 
@@ -98,14 +98,14 @@ export function FiltersDialog({ clients, projects }: FiltersDialogProps) {
             />
           </div>
 
-          {/* FILTRO: PROYECTO (Full Width) */}
+          {/* FILTRO: PRESUPUESTO (Full Width) */}
           <div className="col-span-2">
             <SearchableFilterSelect
-              label="Proyecto"
-              placeholder="Seleccionar proyecto"
-              items={projects}
-              value={projectId}
-              onValueChange={setProjectId}
+              label="Presupuesto"
+              placeholder="Seleccionar presupuesto"
+              items={presupuestos}
+              value={presupuestoId}
+              onValueChange={setPresupuestoId}
             />
           </div>
 
@@ -118,9 +118,8 @@ export function FiltersDialog({ clients, projects }: FiltersDialogProps) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todas</SelectItem>
-                <SelectItem value="project">Proyecto</SelectItem>
+                <SelectItem value="presupuesto">Presupuesto</SelectItem>
                 <SelectItem value="recurring">Recurrente</SelectItem>
-                <SelectItem value="pago">Pago</SelectItem>
                 <SelectItem value="other">Otro</SelectItem>
               </SelectContent>
             </Select>

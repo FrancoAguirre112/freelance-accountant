@@ -153,8 +153,7 @@ export function MaintenanceTab({
         category: "recurring",
         description: `${serviceName} — ${monthLabel}`,
         serviceId,
-        projectId: null,
-        pagoId: null,
+        presupuestoId: null,
         status: "paid",
       });
 

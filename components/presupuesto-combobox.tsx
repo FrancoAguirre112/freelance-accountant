@@ -18,33 +18,37 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
-interface Pago {
+interface Presupuesto {
   id: number;
   name: string;
+  type: string;
 }
 
-interface PagoComboboxProps {
-  pagos: Pago[];
+interface PresupuestoComboboxProps {
+  presupuestos: Presupuesto[];
   name?: string;
   required?: boolean;
+  filterType?: "ingreso" | "egreso";
 }
 
-export function PagoCombobox({
-  pagos,
+export function PresupuestoCombobox({
+  presupuestos,
   name,
   required,
-}: PagoComboboxProps) {
+  filterType,
+}: PresupuestoComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const [value, setValue] = React.useState("");
 
-  const selectedPago = pagos.find(
-    (pago) => pago.id.toString() === value,
-  );
+  const filtered = filterType
+    ? presupuestos.filter((p) => p.type === filterType)
+    : presupuestos;
+
+  const selected = filtered.find((p) => p.id.toString() === value);
 
   return (
     <div className="flex flex-col w-full">
       <input type="hidden" name={name} value={value} required={required} />
-
       <Popover open={open} onOpenChange={setOpen} modal={true}>
         <PopoverTrigger asChild>
           <Button
@@ -54,9 +58,9 @@ export function PagoCombobox({
             className="justify-between w-full font-normal"
           >
             {value ? (
-              selectedPago?.name
+              selected?.name
             ) : (
-              <span className="text-muted-foreground">Buscar pago...</span>
+              <span className="text-muted-foreground">Buscar presupuesto...</span>
             )}
             <ChevronsUpDown className="opacity-50 ml-2 w-4 h-4 shrink-0" />
           </Button>
@@ -66,9 +70,9 @@ export function PagoCombobox({
           align="start"
         >
           <Command>
-            <CommandInput placeholder="Buscar pago..." />
+            <CommandInput placeholder="Buscar presupuesto..." />
             <CommandList>
-              <CommandEmpty>No se encontró el pago.</CommandEmpty>
+              <CommandEmpty>No se encontró.</CommandEmpty>
               <CommandGroup>
                 <CommandItem
                   value="none"
@@ -85,25 +89,22 @@ export function PagoCombobox({
                   />
                   Ninguno (Sin vincular)
                 </CommandItem>
-
-                {pagos.map((pago) => (
+                {filtered.map((p) => (
                   <CommandItem
-                    key={pago.id}
-                    value={pago.name}
+                    key={p.id}
+                    value={p.name}
                     onSelect={() => {
-                      setValue(pago.id.toString());
+                      setValue(p.id.toString());
                       setOpen(false);
                     }}
                   >
                     <Check
                       className={cn(
                         "mr-2 w-4 h-4",
-                        value === pago.id.toString()
-                          ? "opacity-100"
-                          : "opacity-0",
+                        value === p.id.toString() ? "opacity-100" : "opacity-0",
                       )}
                     />
-                    {pago.name}
+                    {p.name}
                   </CommandItem>
                 ))}
               </CommandGroup>
