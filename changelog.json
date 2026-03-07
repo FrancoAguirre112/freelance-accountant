@@ -10,7 +10,9 @@
       "Nueva lista: Últimos Movimientos del período",
       "Nueva lista: Presupuestos por Cobrar con monto pendiente",
       "Nuevo switch en Presupuestos para pausar/activar rápidamente",
-      "Corrección: porcentaje de progreso en egresos ya no muestra valores negativos"
+      "Corrección: porcentaje de progreso en egresos ya no muestra valores negativos",
+      "Mejora mobile: gráficos responsivos que se adaptan al tamaño de pantalla",
+      "Mejora mobile: tooltips de gráficos ahora funcionan con tap en dispositivos táctiles"
     ]
   },
   {

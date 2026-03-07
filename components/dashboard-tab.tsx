@@ -279,8 +279,8 @@ export function DashboardTab({
       )}
 
       {/* Existing charts */}
-      <div className="gap-4 grid md:grid-cols-2 lg:grid-cols-7 w-full">
-      <Card className="col-span-4">
+      <div className="gap-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 w-full">
+      <Card className="md:col-span-1 lg:col-span-4 min-w-0">
         <CardHeader>
           <CardTitle>Ingresos Reales por Mes</CardTitle>
           <CardDescription>
@@ -288,11 +288,11 @@ export function DashboardTab({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ChartContainer config={chartConfig} className="w-full h-[300px]">
+          <ChartContainer config={chartConfig} className="w-full h-[200px] md:h-[300px]">
             <BarChart data={barData}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="month" tickLine={false} axisLine={false} />
-              <ChartTooltip content={<ChartTooltipContent />} />
+              <ChartTooltip trigger="click" content={<ChartTooltipContent />} />
               <Bar
                 dataKey="ingreso"
                 fill={chartConfig.ingreso.color}
@@ -319,15 +319,15 @@ export function DashboardTab({
         </CardContent>
       </Card>
 
-      <Card className="col-span-3">
+      <Card className="md:col-span-1 lg:col-span-3 min-w-0">
         <CardHeader>
           <CardTitle>Distribución de Ingresos</CardTitle>
           <CardDescription>Total acumulado en el período</CardDescription>
         </CardHeader>
         <CardContent>
-          <ChartContainer config={chartConfig} className="w-full h-[300px]">
+          <ChartContainer config={chartConfig} className="w-full h-[200px] md:h-[300px]">
             <PieChart>
-              <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+              <ChartTooltip trigger="click" content={<ChartTooltipContent hideLabel />} />
               <Pie
                 data={pieData}
                 dataKey="value"
@@ -346,7 +346,7 @@ export function DashboardTab({
     </div>
 
       {/* Row 2: Top Clients + Presupuesto Progress */}
-      <div className="gap-4 grid md:grid-cols-2">
+      <div className="gap-4 grid grid-cols-1 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Top Clientes por Ingreso</CardTitle>
@@ -358,12 +358,12 @@ export function DashboardTab({
                 No hay ingresos en este período.
               </p>
             ) : (
-              <ChartContainer config={topClientsConfig} className="w-full h-[250px]">
+              <ChartContainer config={topClientsConfig} className="w-full h-[200px] md:h-[250px]">
                 <BarChart data={topClientsData} layout="vertical">
                   <CartesianGrid horizontal={false} strokeDasharray="3 3" />
                   <XAxis type="number" tickLine={false} axisLine={false} hide />
                   <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} hide />
-                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <ChartTooltip trigger="click" content={<ChartTooltipContent />} />
                   <Bar dataKey="total" fill={topClientsConfig.total.color} radius={[0, 4, 4, 0]}>
                     {topClientsData.map((entry) => (
                       <Cell key={entry.name} />
@@ -421,7 +421,7 @@ export function DashboardTab({
       </div>
 
       {/* Row 3: Recent Transactions + Pending Collection */}
-      <div className="gap-4 grid md:grid-cols-2">
+      <div className="gap-4 grid grid-cols-1 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Últimos Movimientos</CardTitle>
