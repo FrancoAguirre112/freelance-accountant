@@ -168,7 +168,12 @@ export default async function DashboardPage({
         </TabsList>
 
         <TabsContent value="overview">
-          <DashboardTab data={allTransactions} />
+          <DashboardTab
+            data={allTransactions}
+            presupuestos={allPresupuestos}
+            clients={allClients}
+            services={allServices}
+          />
         </TabsContent>
 
         <TabsContent value="transactions">

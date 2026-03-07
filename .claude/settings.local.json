@@ -17,7 +17,8 @@
       "Bash(npx tsx scripts/merge-recurring-types.ts)",
       "Bash(npx tsc --noEmit)",
       "Bash(npm run build)",
-      "Bash(pnpm run build)"
+      "Bash(pnpm run build)",
+      "Bash(grep -E \"\\\\.tsx$\")"
     ]
   }
 }

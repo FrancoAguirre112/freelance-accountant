@@ -13,6 +13,8 @@ import { TabSearch, parseSearch } from "@/components/tab-search";
 import { TabFilters, useTabFilters, type FilterField } from "@/components/tab-filters";
 import { CsvExportButton } from "@/components/csv-export-button";
 import { SortableHeader, useSort } from "@/components/ui/sortable-header";
+import { Switch } from "@/components/ui/switch";
+import { updatePresupuestoAction } from "@/app/actions";
 
 type Client = InferSelectModel<typeof clients>;
 type Transaction = InferSelectModel<typeof transactions>;
@@ -138,6 +140,7 @@ export function PresupuestosTab({
               <SortableHeader label="Cobrado" sortKey="paid" sort={sort} onSort={onSort} />
               <SortableHeader label="Progreso" sortKey="progress" sort={sort} onSort={onSort} />
               <SortableHeader label="Estado" sortKey="status" sort={sort} onSort={onSort} className="text-right" />
+              <TableHead className="w-[70px] text-center">Activo</TableHead>
               <TableHead className="w-[50px]"></TableHead>
             </TableRow>
           </TableHeader>
@@ -196,6 +199,15 @@ export function PresupuestosTab({
                       {statusLabel}
                     </Badge>
                   </TableCell>
+                  <TableCell className="text-center">
+                    <Switch
+                      checked={p.status === "activo"}
+                      onCheckedChange={(checked) => {
+                        updatePresupuestoAction(p.id, { status: checked ? "activo" : "pausado" });
+                      }}
+                      disabled={p.status === "finalizado"}
+                    />
+                  </TableCell>
                   <TableCell>
                     <RowActions row={p} type="presupuesto" clients={clients} />
                   </TableCell>
@@ -223,6 +235,7 @@ export function PresupuestosTab({
                   </span>
                 </div>
               </TableCell>
+              <TableCell />
               <TableCell />
               <TableCell />
             </TableRow>

@@ -1,5 +1,19 @@
 [
   {
+    "version": "0.5.0",
+    "date": "2026-03-07",
+    "changes": [
+      "Dashboard rediseñado con tarjetas KPI: Ingresos, Egresos, Balance Neto y Cobro Pendiente",
+      "Indicador de presupuestos pausados con monto total en pausa",
+      "Nuevo gráfico: Top Clientes por Ingreso del período",
+      "Nuevo panel: Progreso de Presupuestos activos con barras de avance",
+      "Nueva lista: Últimos Movimientos del período",
+      "Nueva lista: Presupuestos por Cobrar con monto pendiente",
+      "Nuevo switch en Presupuestos para pausar/activar rápidamente",
+      "Corrección: porcentaje de progreso en egresos ya no muestra valores negativos"
+    ]
+  },
+  {
     "version": "0.4.0",
     "date": "2026-03-07",
     "changes": [
