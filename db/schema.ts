@@ -77,6 +77,7 @@ export const recurringServices = sqliteTable("recurring_services", {
   amount: real("amount").notNull(),
   type: text("type", { enum: ["service", "payment"] }).notNull().default("service"),
   billingDay: integer("billing_day").notNull().default(1),
+  createdAt: integer("created_at", { mode: "timestamp" }),
 }, (table) => [
   index("recurring_services_user_id_idx").on(table.userId),
 ]);

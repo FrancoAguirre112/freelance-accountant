@@ -198,6 +198,7 @@ export async function createRecurringServiceAction(data: {
       amount: data.amount,
       type: data.type || "service",
       billingDay: data.billingDay || 1,
+      createdAt: new Date(),
       userId,
     });
 
@@ -222,6 +223,7 @@ export async function createRecurringFromPresupuestoAction(data: {
       clientId: data.clientId,
       amount: data.amount,
       type: "payment",
+      createdAt: new Date(),
       userId,
     });
 
@@ -332,6 +334,7 @@ export async function bulkSmartImportAction(data: RawImportData) {
               clientId,
               amount: r.amount,
               type: r.type === "payment" ? "payment" : "service",
+              createdAt: new Date(),
               userId,
             })
             .returning({ id: recurringServices.id });
