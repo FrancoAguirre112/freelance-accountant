@@ -18,6 +18,7 @@ import { Montserrat } from "next/font/google";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ChangelogButton } from "@/components/update-notification";
 import { MobileNav } from "@/components/mobile-nav";
+import { SettingsDialog } from "@/components/settings-dialog";
 
 
 // 2. Initialize Montserrat with the 'Black' weight (900)
@@ -151,6 +152,7 @@ export default async function DashboardPage({
           <ClientsDatabaseDialog clients={allClients} />
           <div className="mx-1 bg-border w-[1px] h-8 shrink-0" />
           <ChangelogButton />
+          <SettingsDialog />
           <ThemeToggle />
           <UserMenu />
         </div>

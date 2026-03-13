@@ -1,5 +1,24 @@
 [
   {
+    "version": "0.6.0",
+    "date": "2026-03-13",
+    "changes": [
+      "Nuevo sistema de día de cobro/pago configurable por operación recurrente",
+      "Cálculo automático de próximo vencimiento basado en cobertura de meses",
+      "Badges de estado de vencimiento: rojo (vencido), amarillo (próximo), gris (al día)",
+      "Filtro por estado de vencimiento en pestaña Recurrentes",
+      "Modal de detalle mensual con historial de pagos y fecha de vencimiento",
+      "Columnas ordenables en tabla de Recurrentes",
+      "Animaciones GSAP: contadores animados en KPIs del Dashboard",
+      "Animaciones GSAP: aparición escalonada de tarjetas y secciones",
+      "Transición suave al cambiar de pestaña con fade-in",
+      "Filas de tablas aparecen con animación escalonada",
+      "Efecto hover sutil en tarjetas (elevación con sombra)",
+      "Efecto press en botones para feedback táctil",
+      "Scrollbar personalizado site-wide con estilo minimalista"
+    ]
+  },
+  {
     "version": "0.5.0",
     "date": "2026-03-07",
     "changes": [

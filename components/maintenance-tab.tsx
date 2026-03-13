@@ -18,6 +18,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -38,6 +44,7 @@ type Client = InferSelectModel<typeof clients>;
 type Transaction = InferSelectModel<typeof transactions>;
 type Service = InferSelectModel<typeof recurringServices> & {
   client: Client | null;
+  billingDay?: number;
 };
 
 interface MaintenanceTabProps {
@@ -61,6 +68,17 @@ export function MaintenanceTab({
   const [search, setSearch] = React.useState("");
   const { sort, onSort } = useSort();
   const [generatingKey, setGeneratingKey] = React.useState<string | null>(null);
+  const [monthModal, setMonthModal] = React.useState<{
+    serviceId: number;
+    serviceName: string;
+    serviceType: string;
+    monthlyFee: number;
+    monthId: string;
+    monthLabel: string;
+    paid: number;
+    isCovered: boolean;
+    transactions: Transaction[];
+  } | null>(null);
   const { values: filters, onChange: onFilterChange, onClear: onFilterClear } = useTabFilters();
 
   const filterFields: FilterField[] = React.useMemo(() => [
@@ -68,6 +86,11 @@ export function MaintenanceTab({
     { key: "type", label: "Tipo", type: "select", options: [
       { value: "service", label: "Ingreso" },
       { value: "payment", label: "Egreso" },
+    ]},
+    { key: "vencimiento", label: "Vencimiento", type: "select", options: [
+      { value: "vencido", label: "Vencido" },
+      { value: "por_vencer", label: "Por vencer" },
+      { value: "al_dia", label: "Al día" },
     ]},
   ], [clients]);
 
@@ -81,12 +104,17 @@ export function MaintenanceTab({
       t.date <= new Date(to.setUTCHours(23, 59, 59, 999))
   );
 
+  const allRecurringTransactions = transactions.filter(
+    (t) => t.category === "recurring"
+  );
+
   const data = services.map((service) => {
     const serviceTrans = relatedTransactions.filter(
       (t) => t.serviceId === service.id
     );
 
     const paymentsByMonth: Record<string, number> = {};
+    const transactionsByMonth: Record<string, Transaction[]> = {};
     let totalCollected = 0;
 
     serviceTrans.forEach((t) => {
@@ -94,8 +122,65 @@ export function MaintenanceTab({
       const key = dateToUse.toISOString().slice(0, 7);
 
       paymentsByMonth[key] = (paymentsByMonth[key] || 0) + t.amount;
+      if (!transactionsByMonth[key]) transactionsByMonth[key] = [];
+      transactionsByMonth[key].push(t);
       totalCollected += t.amount;
     });
+
+    // Compute last paid date (from all transactions, not just period)
+    const allServiceTrans = allRecurringTransactions.filter(
+      (t) => t.serviceId === service.id
+    );
+    let lastPaidDate: Date | null = null;
+    if (allServiceTrans.length > 0) {
+      lastPaidDate = allServiceTrans.reduce((latest, t) => {
+        return t.date > latest ? t.date : latest;
+      }, allServiceTrans[0].date);
+    }
+
+    // Compute next due date based on billingDay cycle (NOT last payment date)
+    // Walk forward from current month checking which months are covered
+    const billingDay = service.billingDay || 1;
+    const now = new Date();
+    let nextDueDate!: Date;
+
+    // Build a map of all-time payments by month for this service
+    const allPaymentsByMonth: Record<string, number> = {};
+    allServiceTrans.forEach((t) => {
+      const dateToUse = t.imputedDate || t.date;
+      const key = dateToUse.toISOString().slice(0, 7);
+      allPaymentsByMonth[key] = (allPaymentsByMonth[key] || 0) + t.amount;
+    });
+
+    // Find the first uncovered month, then due date = billingDay of the NEXT month
+    // (e.g. Feb service is due on billingDay of March, Mar service is due on billingDay of April)
+    // Only look back 1 month (in case billing day hasn't passed yet this month)
+    let found = false;
+    for (let offset = -1; offset <= 1; offset++) {
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1));
+      const key = d.toISOString().slice(0, 7);
+      const paid = allPaymentsByMonth[key] || 0;
+      if (paid < service.amount) {
+        // Due date is billingDay of month AFTER the uncovered month
+        const dueMonth = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
+        const maxDay = new Date(dueMonth.getUTCFullYear(), dueMonth.getUTCMonth() + 1, 0).getDate();
+        nextDueDate = new Date(Date.UTC(dueMonth.getUTCFullYear(), dueMonth.getUTCMonth(), Math.min(billingDay, maxDay), 12, 0, 0, 0));
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      // All months covered — next due is billingDay two months from now
+      const dueMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 2, 1));
+      const maxDay = new Date(dueMonth.getUTCFullYear(), dueMonth.getUTCMonth() + 1, 0).getDate();
+      nextDueDate = new Date(Date.UTC(dueMonth.getUTCFullYear(), dueMonth.getUTCMonth(), Math.min(billingDay, maxDay), 12, 0, 0, 0));
+    }
+
+    // Compute due status for filtering and badge
+    const diffMs = nextDueDate.getTime() - now.getTime();
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+    const dueStatus: "vencido" | "por_vencer" | "al_dia" =
+      diffDays < 0 ? "vencido" : diffDays <= 2 ? "por_vencer" : "al_dia";
 
     return {
       serviceId: service.id,
@@ -106,6 +191,11 @@ export function MaintenanceTab({
       monthlyFee: service.amount,
       totalCollected,
       paymentsByMonth,
+      transactionsByMonth,
+      lastPaidDate,
+      nextDueDate,
+      billingDay,
+      dueStatus,
     };
   });
 
@@ -117,6 +207,7 @@ export function MaintenanceTab({
       // Structured filters
       if (filters.clientId && filters.clientId !== "all" && item.clientId?.toString() !== filters.clientId) return false;
       if (filters.type && filters.type !== "all" && item.serviceType !== filters.type) return false;
+      if (filters.vencimiento && filters.vencimiento !== "all" && item.dueStatus !== filters.vencimiento) return false;
 
       // Search
       if (!term) return true;
@@ -178,6 +269,7 @@ export function MaintenanceTab({
         case "type": va = a.serviceType; vb = b.serviceType; break;
         case "fee": va = a.monthlyFee; vb = b.monthlyFee; break;
         case "collected": va = a.totalCollected; vb = b.totalCollected; break;
+        case "nextDue": va = a.nextDueDate.getTime(); vb = b.nextDueDate.getTime(); break;
         default: return 0;
       }
       if (typeof va === "number" && typeof vb === "number") return (va - vb) * mul;
@@ -286,6 +378,7 @@ export function MaintenanceTab({
               <SortableHeader label="Tipo" sortKey="type" sort={sort} onSort={onSort} />
               <SortableHeader label="Monto Mensual" sortKey="fee" sort={sort} onSort={onSort} />
               <SortableHeader label="Cobrado/Pagado" sortKey="collected" sort={sort} onSort={onSort} />
+              <SortableHeader label="Próximo Vencimiento" sortKey="nextDue" sort={sort} onSort={onSort} />
               <TableHead>Estado</TableHead>
               <TableHead className="w-[50px]"></TableHead>
             </TableRow>
@@ -294,7 +387,7 @@ export function MaintenanceTab({
             {sortedData.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={7}
+                  colSpan={8}
                   className="py-8 text-muted-foreground text-center"
                 >
                   {search
@@ -374,6 +467,17 @@ export function MaintenanceTab({
                         ${item.totalCollected.toLocaleString()}
                       </TableCell>
                       <TableCell>
+                        <Badge variant="outline" className={cn("text-xs",
+                          item.dueStatus === "vencido"
+                            ? "bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800"
+                            : item.dueStatus === "por_vencer"
+                              ? "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-950 dark:text-yellow-300 dark:border-yellow-800"
+                              : "bg-muted text-muted-foreground border-border",
+                        )}>
+                          {item.nextDueDate.toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" })}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
                         <Badge variant="outline" className="gap-1">
                           {monthsCovered === months.length &&
                           months.length > 0 ? (
@@ -394,23 +498,31 @@ export function MaintenanceTab({
 
                     {expandedRows[item.serviceId] && (
                       <TableRow className="bg-muted/30 hover:bg-muted/30">
-                        <TableCell colSpan={7} className="p-0">
+                        <TableCell colSpan={8} className="p-0">
                           <div className="p-4 pl-12">
                             <h4 className="mb-2 font-semibold text-muted-foreground text-xs uppercase tracking-wider">
                               Detalle Mensual
                             </h4>
                             <div className="gap-3 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6">
                               {details.map((d, idx) => {
-                                const cardKey = `${item.serviceId}-${d.id}`;
-                                const isGenerating = generatingKey === cardKey;
-                                const canGenerate = !d.isCovered;
-                                const remaining = item.monthlyFee - d.paid;
+                                const monthTransactions = item.transactionsByMonth[d.id] || [];
 
                                 return (
                                 <div
                                   key={idx}
+                                  onClick={() => setMonthModal({
+                                    serviceId: item.serviceId,
+                                    serviceName: item.serviceName,
+                                    serviceType: item.serviceType,
+                                    monthlyFee: item.monthlyFee,
+                                    monthId: d.id,
+                                    monthLabel: d.label,
+                                    paid: d.paid,
+                                    isCovered: d.isCovered,
+                                    transactions: monthTransactions,
+                                  })}
                                   className={cn(
-                                    "flex flex-col items-center p-3 border rounded-md text-sm text-center transition-all",
+                                    "flex flex-col items-center p-3 border rounded-md text-sm text-center transition-all cursor-pointer hover:ring-1 hover:ring-ring",
                                     d.isCovered
                                       ? isPayment
                                         ? "bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800"
@@ -441,31 +553,10 @@ export function MaintenanceTab({
                                       Pendiente
                                     </span>
                                   )}
-                                  {canGenerate && (
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="mt-1.5 h-6 px-2 text-[0.65rem] gap-1"
-                                      disabled={isGenerating}
-                                      onClick={() =>
-                                        handleAutoGenerate(
-                                          item.serviceId,
-                                          item.serviceName,
-                                          item.serviceType,
-                                          item.monthlyFee,
-                                          d.paid,
-                                          d.id,
-                                          d.label,
-                                        )
-                                      }
-                                    >
-                                      {isGenerating ? (
-                                        <Loader2 className="w-3 h-3 animate-spin" />
-                                      ) : (
-                                        <Zap className="w-3 h-3" />
-                                      )}
-                                      {isPayment ? "Pagar" : "Cobrar"} ${remaining}
-                                    </Button>
+                                  {monthTransactions.length > 0 && (
+                                    <span className="text-[10px] text-muted-foreground mt-1">
+                                      {monthTransactions.length} pago{monthTransactions.length !== 1 ? "s" : ""}
+                                    </span>
                                   )}
                                 </div>
                                 );
@@ -482,6 +573,123 @@ export function MaintenanceTab({
           </TableBody>
         </Table>
       </div>
+
+      {/* Month Detail Modal */}
+      <Dialog open={!!monthModal} onOpenChange={(open) => !open && setMonthModal(null)}>
+        <DialogContent className="sm:max-w-md">
+          {monthModal && (() => {
+            const isPayment = monthModal.serviceType === "payment";
+            const remaining = monthModal.monthlyFee - monthModal.paid;
+            const canGenerate = !monthModal.isCovered;
+            const cardKey = `${monthModal.serviceId}-${monthModal.monthId}`;
+            const isGenerating = generatingKey === cardKey;
+
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle>{monthModal.monthLabel}</DialogTitle>
+                  <p className="text-sm text-muted-foreground">{monthModal.serviceName}</p>
+                </DialogHeader>
+
+                <div className="space-y-4">
+                  {/* Amount summary */}
+                  <div className="flex items-center justify-between p-3 rounded-md bg-muted/50">
+                    <span className="text-sm text-muted-foreground">{isPayment ? "Pagado" : "Cobrado"}</span>
+                    <span className="font-bold text-lg">
+                      ${monthModal.paid.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">/ ${monthModal.monthlyFee.toLocaleString()}</span>
+                    </span>
+                  </div>
+
+                  {/* Due date */}
+                  {(() => {
+                    // Due date for this month = billingDay of the next month
+                    const monthDate = new Date(monthModal.monthId + "-01T12:00:00Z");
+                    const dueMonth = new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth() + 1, 1));
+                    const serviceData = data.find((d) => d.serviceId === monthModal.serviceId);
+                    const bd = serviceData?.billingDay || 1;
+                    const maxDay = new Date(dueMonth.getUTCFullYear(), dueMonth.getUTCMonth() + 1, 0).getDate();
+                    const dueDate = new Date(Date.UTC(dueMonth.getUTCFullYear(), dueMonth.getUTCMonth(), Math.min(bd, maxDay), 12, 0, 0, 0));
+                    const now = new Date();
+                    const diffDays = (dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+                    const badgeClass = monthModal.isCovered
+                      ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800"
+                      : diffDays < 0
+                        ? "bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800"
+                        : diffDays <= 2
+                          ? "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-950 dark:text-yellow-300 dark:border-yellow-800"
+                          : "bg-muted text-muted-foreground border-border";
+                    return (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Fecha Vencimiento</span>
+                        <Badge variant="outline" className={cn("text-xs", badgeClass)}>
+                          {dueDate.toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" })}
+                        </Badge>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Payment history */}
+                  <div className="flex flex-col">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                      Historial de Pagos
+                    </h4>
+                    {monthModal.transactions.length === 0 ? (
+                      <div className="py-8 flex items-center justify-center text-sm text-muted-foreground">
+                        Sin pagos registrados
+                      </div>
+                    ) : (
+                      <div className={cn("space-y-2 overflow-y-auto", canGenerate ? "max-h-[200px]" : "max-h-[280px]")}>
+                        {monthModal.transactions
+                          .sort((a, b) => b.date.getTime() - a.date.getTime())
+                          .map((t) => (
+                          <div key={t.id} className="flex items-center justify-between p-2 rounded-md border bg-card text-sm">
+                            <div className="flex flex-col">
+                              <span className="font-medium">{t.description || (isPayment ? "Pago" : "Cobro")}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {t.date.toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" })}
+                              </span>
+                            </div>
+                            <span className={cn("font-semibold", isPayment ? "text-red-600" : "text-green-600")}>
+                              ${Math.abs(t.amount).toLocaleString()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Pay remaining button */}
+                  {canGenerate && (
+                    <Button
+                      className="w-full gap-2"
+                      disabled={isGenerating}
+                      onClick={async () => {
+                        await handleAutoGenerate(
+                          monthModal.serviceId,
+                          monthModal.serviceName,
+                          monthModal.serviceType,
+                          monthModal.monthlyFee,
+                          monthModal.paid,
+                          monthModal.monthId,
+                          monthModal.monthLabel,
+                        );
+                        setMonthModal(null);
+                      }}
+                    >
+                      {isGenerating ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Zap className="w-4 h-4" />
+                      )}
+                      {isPayment ? "Pagar" : "Cobrar"} ${remaining.toLocaleString()} restante
+                    </Button>
+                  )}
+                </div>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

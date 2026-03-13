@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useStaggerReveal, useCountUp } from "@/hooks/use-gsap";
 import {
   Bar,
   BarChart,
@@ -208,6 +209,17 @@ export function DashboardTab({
 
   const totalActivePresupuestos = presupuestosData.filter((p) => p.status === "activo").length;
 
+  // GSAP animations
+  const kpiRef = useStaggerReveal({ stagger: 0.08, y: 20 });
+  const chartsRef = useStaggerReveal({ delay: 0.15, stagger: 0.1, y: 24 });
+  const row2Ref = useStaggerReveal({ delay: 0.25, stagger: 0.1, y: 24 });
+  const row3Ref = useStaggerReveal({ delay: 0.3, stagger: 0.1, y: 24 });
+
+  const incomeRef = useCountUp(kpis.totalIncome, { delay: 0.2 });
+  const expenseRef = useCountUp(kpis.totalExpense, { delay: 0.3 });
+  const balanceRef = useCountUp(Math.abs(kpis.balance), { delay: 0.4, prefix: kpis.balance >= 0 ? "$" : "- $" });
+  const pendingRef = useCountUp(kpis.pendingCollection, { delay: 0.5 });
+
   const recentTransactions = useMemo(() => {
     return [...data]
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -235,10 +247,10 @@ export function DashboardTab({
   return (
     <div className="space-y-4">
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div ref={kpiRef} className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-green-600">
+            <div ref={incomeRef} className="text-2xl font-bold text-green-600">
               ${kpis.totalIncome.toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </div>
             <p className="text-xs text-muted-foreground">Ingresos del Período</p>
@@ -246,7 +258,7 @@ export function DashboardTab({
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-red-600">
+            <div ref={expenseRef} className="text-2xl font-bold text-red-600">
               ${kpis.totalExpense.toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </div>
             <p className="text-xs text-muted-foreground">Egresos del Período</p>
@@ -254,7 +266,7 @@ export function DashboardTab({
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className={`text-2xl font-bold ${kpis.balance >= 0 ? "text-green-600" : "text-red-600"}`}>
+            <div ref={balanceRef} className={`text-2xl font-bold ${kpis.balance >= 0 ? "text-green-600" : "text-red-600"}`}>
               {kpis.balance >= 0 ? "" : "- "}${Math.abs(kpis.balance).toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </div>
             <p className="text-xs text-muted-foreground">Balance Neto</p>
@@ -262,7 +274,7 @@ export function DashboardTab({
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-blue-600">
+            <div ref={pendingRef} className="text-2xl font-bold text-blue-600">
               ${kpis.pendingCollection.toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </div>
             <p className="text-xs text-muted-foreground">Cobro Pendiente</p>
@@ -279,7 +291,7 @@ export function DashboardTab({
       )}
 
       {/* Existing charts */}
-      <div className="gap-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 w-full">
+      <div ref={chartsRef} className="gap-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 w-full">
       <Card className="md:col-span-1 lg:col-span-4 min-w-0">
         <CardHeader>
           <CardTitle>Ingresos Reales por Mes</CardTitle>
@@ -346,7 +358,7 @@ export function DashboardTab({
     </div>
 
       {/* Row 2: Top Clients + Presupuesto Progress */}
-      <div className="gap-4 grid grid-cols-1 md:grid-cols-2">
+      <div ref={row2Ref} className="gap-4 grid grid-cols-1 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Top Clientes por Ingreso</CardTitle>
@@ -421,7 +433,7 @@ export function DashboardTab({
       </div>
 
       {/* Row 3: Recent Transactions + Pending Collection */}
-      <div className="gap-4 grid grid-cols-1 md:grid-cols-2">
+      <div ref={row3Ref} className="gap-4 grid grid-cols-1 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Últimos Movimientos</CardTitle>

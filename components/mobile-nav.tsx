@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { useActiveTab } from "@/components/active-tab-context";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { SettingsDialog } from "@/components/settings-dialog";
 
 const montserrat = Montserrat({ subsets: ["latin"], weight: "900" });
 
@@ -81,7 +82,8 @@ export function MobileNav({
             </div>
           </div>
 
-          <div className="mt-auto px-4 pb-4">
+          <div className="mt-auto px-4 pb-4 flex items-center gap-2">
+            <SettingsDialog />
             <ThemeToggle />
           </div>
         </SheetContent>

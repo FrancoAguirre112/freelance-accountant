@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { UpdateNotification } from "@/components/update-notification";
 import { ThemeProvider } from "@/components/theme-provider";
 import { SessionProvider } from "next-auth/react";
+import { PerformanceProvider } from "@/components/performance-context";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -26,9 +27,11 @@ export default function RootLayout({
       <body className={inter.className}>
         <SessionProvider>
           <ThemeProvider>
-            <main>{children}</main>
-            <Toaster position="top-center" richColors />
-            <UpdateNotification />
+            <PerformanceProvider>
+              <main>{children}</main>
+              <Toaster position="top-center" richColors />
+              <UpdateNotification />
+            </PerformanceProvider>
           </ThemeProvider>
         </SessionProvider>
       </body>

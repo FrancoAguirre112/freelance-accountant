@@ -186,6 +186,7 @@ export async function createRecurringServiceAction(data: {
   clientName: string;
   amount: number;
   type?: "service" | "payment";
+  billingDay?: number;
 }) {
   try {
     const userId = await requireUserId();
@@ -196,6 +197,7 @@ export async function createRecurringServiceAction(data: {
       clientId: clientId,
       amount: data.amount,
       type: data.type || "service",
+      billingDay: data.billingDay || 1,
       userId,
     });
 

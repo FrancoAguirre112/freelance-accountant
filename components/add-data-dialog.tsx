@@ -159,6 +159,7 @@ export function AddDataDialog({
         clientName: formData.get("clientName") as string,
         amount: parseFloat(formData.get("amount") as string),
         type: formData.get("recurringType") as "service" | "payment",
+        billingDay: parseInt(formData.get("billingDay") as string) || 1,
       });
 
       if (res.success) {
@@ -392,6 +393,11 @@ export function AddDataDialog({
               <div className="space-y-2">
                 <Label>Monto Mensual (USD)</Label>
                 <Input name="amount" type="number" step="0.01" required />
+              </div>
+              <div className="space-y-2">
+                <Label>Día de cobro/pago</Label>
+                <Input name="billingDay" type="number" min="1" max="31" defaultValue="1" required />
+                <p className="text-xs text-muted-foreground">Día del mes en que se cobra o paga (1-31)</p>
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Configurar Recurrencia"}

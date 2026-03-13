@@ -56,6 +56,7 @@ interface MaintenanceService {
   monthlyFee: number;
   clientId: number | null;
   clientName: string;
+  billingDay: number;
 }
 
 export function MaintenanceRowActions({
@@ -88,6 +89,7 @@ export function MaintenanceRowActions({
       amount: parseFloat(formData.get("amount") as string),
       clientId: Number(formData.get("clientId")),
       type: formData.get("type") as "service" | "payment",
+      billingDay: parseInt(formData.get("billingDay") as string) || 1,
     });
 
     if (res.success) {
@@ -163,6 +165,18 @@ export function MaintenanceRowActions({
                 defaultValue={service.monthlyFee}
                 required
               />
+            </div>
+            <div className="space-y-2">
+              <Label>Día de cobro/pago</Label>
+              <Input
+                name="billingDay"
+                type="number"
+                min="1"
+                max="31"
+                defaultValue={service.billingDay || 1}
+                required
+              />
+              <p className="text-xs text-muted-foreground">Día del mes en que se cobra o paga (1-31)</p>
             </div>
             <DialogFooter>
               <Button
