@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import {
-  ChevronDown,
   ChevronRight,
   CheckCircle2,
   Clock,
@@ -423,11 +422,10 @@ export function MaintenanceTab({
                           className="w-6 h-6"
                           onClick={() => toggleRow(item.serviceId)}
                         >
-                          {expandedRows[item.serviceId] ? (
-                            <ChevronDown className="w-4 h-4" />
-                          ) : (
-                            <ChevronRight className="w-4 h-4" />
-                          )}
+                          <ChevronRight
+                            className="w-4 h-4 animate-chevron"
+                            data-expanded={expandedRows[item.serviceId] ? "true" : "false"}
+                          />
                         </Button>
                       </TableCell>
                       <TableCell
@@ -497,7 +495,7 @@ export function MaintenanceTab({
                     </TableRow>
 
                     {expandedRows[item.serviceId] && (
-                      <TableRow className="bg-muted/30 hover:bg-muted/30">
+                      <TableRow className="bg-muted/30 hover:bg-muted/30 animate-expand-in">
                         <TableCell colSpan={8} className="p-0">
                           <div className="p-4 pl-12">
                             <h4 className="mb-2 font-semibold text-muted-foreground text-xs uppercase tracking-wider">

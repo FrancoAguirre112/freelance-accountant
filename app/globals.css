@@ -189,9 +189,39 @@ button:hover {
   box-shadow: 0 2px 16px rgba(0, 0, 0, 0.15);
 }
 
+/* Expandable row animation */
+@keyframes expand-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-expand-in {
+  animation: expand-in 0.2s ease-out;
+}
+
+/* Chevron rotation */
+.animate-chevron {
+  transition: transform 0.2s ease;
+}
+
+.animate-chevron[data-expanded="true"] {
+  transform: rotate(90deg);
+}
+
 /* Performance mode: disable all animations */
-.reduce-motion .animate-tab-in {
+.reduce-motion .animate-tab-in,
+.reduce-motion .animate-expand-in {
   animation: none;
+}
+
+.reduce-motion .animate-chevron {
+  transition: none;
 }
 
 .reduce-motion [data-slot="card"] {
