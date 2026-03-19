@@ -14,6 +14,7 @@ import { TabFilters, useTabFilters, type FilterField } from "@/components/tab-fi
 import { CsvExportButton } from "@/components/csv-export-button";
 import { SortableHeader, useSort } from "@/components/ui/sortable-header";
 import { Switch } from "@/components/ui/switch";
+import { SkeletonCells } from "@/components/ui/skeleton-row";
 import { updatePresupuestoAction } from "@/app/actions";
 
 type Client = InferSelectModel<typeof clients>;
@@ -33,6 +34,7 @@ export function PresupuestosTab({
   clients: Client[];
 }) {
   const [search, setSearch] = useState("");
+  const [loadingRows, setLoadingRows] = useState<Set<number>>(new Set());
   const { sort, onSort } = useSort();
   const { values: filters, onChange: onFilterChange, onClear: onFilterClear } = useTabFilters();
 
@@ -165,52 +167,76 @@ export function PresupuestosTab({
                 statusColor = "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-950 dark:text-yellow-300 dark:border-yellow-800";
               }
 
+              const isRowLoading = loadingRows.has(p.id);
               return (
-                <TableRow key={p.id}>
-                  <TableCell className="text-center">
-                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${isIngreso ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800" : "bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800"}`}>
-                      {isIngreso ? "IN" : "EG"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">{p.name}</div>
-                      <div className="text-muted-foreground text-xs">
-                        {p.client?.name}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="font-semibold">
-                    ${p.totalAmount.toLocaleString()}
-                  </TableCell>
-                  <TableCell className={amountColor}>
-                    ${totalPaid.toLocaleString()}
-                  </TableCell>
-                  <TableCell className="w-[200px]">
-                    <div className="flex items-center gap-2">
-                      <Progress value={progressPercentage} className="h-2 flex-1" />
-                      <span className="text-[10px] text-muted-foreground w-8 text-right">
-                        {progressPercentage.toFixed(0)}%
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Badge variant="outline" className={statusColor}>
-                      {statusLabel}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Switch
-                      checked={p.status === "activo"}
-                      onCheckedChange={(checked) => {
-                        updatePresupuestoAction(p.id, { status: checked ? "activo" : "pausado" });
-                      }}
-                      disabled={p.status === "finalizado"}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <RowActions row={p} type="presupuesto" clients={clients} />
-                  </TableCell>
+                <TableRow key={p.id} className={isRowLoading ? "animate-pulse" : ""}>
+                  {isRowLoading ? (
+                    <SkeletonCells widths={["w-8", "w-32", "w-16", "w-16", "w-28", "w-20", "w-10"]} />
+                  ) : (
+                    <>
+                      <TableCell className="text-center">
+                        <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${isIngreso ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800" : "bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800"}`}>
+                          {isIngreso ? "IN" : "EG"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{p.name}</div>
+                          <div className="text-muted-foreground text-xs">
+                            {p.client?.name}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-semibold">
+                        ${p.totalAmount.toLocaleString()}
+                      </TableCell>
+                      <TableCell className={amountColor}>
+                        ${totalPaid.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="w-[200px]">
+                        <div className="flex items-center gap-2">
+                          <Progress value={progressPercentage} className="h-2 flex-1" />
+                          <span className="text-[10px] text-muted-foreground w-8 text-right">
+                            {progressPercentage.toFixed(0)}%
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant="outline" className={statusColor}>
+                          {statusLabel}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Switch
+                          checked={p.status === "activo"}
+                          onCheckedChange={async (checked) => {
+                            setLoadingRows((prev) => new Set(prev).add(p.id));
+                            await updatePresupuestoAction(p.id, { status: checked ? "activo" : "pausado" });
+                            setLoadingRows((prev) => {
+                              const next = new Set(prev);
+                              next.delete(p.id);
+                              return next;
+                            });
+                          }}
+                          disabled={p.status === "finalizado"}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <RowActions
+                          row={p}
+                          type="presupuesto"
+                          clients={clients}
+                          onLoadingChange={(l) => {
+                            setLoadingRows((prev) => {
+                              const next = new Set(prev);
+                              if (l) next.add(p.id); else next.delete(p.id);
+                              return next;
+                            });
+                          }}
+                        />
+                      </TableCell>
+                    </>
+                  )}
                 </TableRow>
               );
             })}

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { MoreHorizontal, Pencil, RefreshCw, Trash } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Loader2, MoreHorizontal, Pencil, RefreshCw, Trash } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,7 +51,7 @@ type RecurringService = InferSelectModel<typeof recurringServices>;
 type Client = InferSelectModel<typeof clients>;
 type TransactionCategory = "presupuesto" | "recurring" | "other";
 
-type RowActionsProps =
+type RowActionsProps = (
   | {
       type: "transaction";
       row: Transaction;
@@ -62,57 +62,76 @@ type RowActionsProps =
       type: "recurring";
       row: RecurringService;
       clients?: Client[];
-    };
+    }
+) & { onLoadingChange?: (loading: boolean) => void };
 
-export function RowActions({ row, type, clients }: RowActionsProps) {
+export function RowActions({ row, type, clients, onLoadingChange }: RowActionsProps) {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isConvertOpen, setIsConvertOpen] = useState(false);
   const [editKey, setEditKey] = useState(0);
+  const [loading, setLoading] = useState(false);
+
+  // Notify parent of loading state changes
+  const prevLoadingRef = useRef(false);
+  useEffect(() => {
+    if (prevLoadingRef.current !== loading) {
+      prevLoadingRef.current = loading;
+      onLoadingChange?.(loading);
+    }
+  }, [loading, onLoadingChange]);
 
   const handleDelete = async () => {
     if (!confirm("¿Estás seguro de que quieres eliminar esto?")) return;
 
-    let res;
-    // TS sabe que 'row' tiene 'id' en todos los casos
-    if (type === "transaction") res = await deleteTransactionAction(row.id);
-    if (type === "presupuesto") res = await deletePresupuestoAction(row.id);
-    if (type === "recurring") res = await deleteRecurringServiceAction(row.id);
+    setLoading(true);
+    try {
+      let res;
+      if (type === "transaction") res = await deleteTransactionAction(row.id);
+      if (type === "presupuesto") res = await deletePresupuestoAction(row.id);
+      if (type === "recurring") res = await deleteRecurringServiceAction(row.id);
 
-    if (res?.success) toast.success("Eliminado correctamente");
-    else toast.error("Error al eliminar");
+      if (res?.success) toast.success("Eliminado correctamente");
+      else toast.error("Error al eliminar");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleUpdate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    let res;
+    setLoading(true);
 
-    // TS infiere automáticamente el tipo de 'row' dentro de cada bloque if
-    if (type === "transaction") {
-      res = await updateTransactionAction(row.id, {
-        date: new Date(formData.get("date") as string),
-        amount: parseFloat(formData.get("amount") as string),
-        description: formData.get("description") as string,
-        // 3. Tipado seguro para la categoría
-        category: formData.get("category") as TransactionCategory,
-      });
-    } else if (type === "presupuesto") {
-      res = await updatePresupuestoAction(row.id, {
-        name: formData.get("name") as string,
-        clientId: parseInt(formData.get("clientId") as string),
-        totalAmount: parseFloat(formData.get("totalAmount") as string),
-        status: formData.get("status") as string,
-      });
-    } else if (type === "recurring") {
-      res = await updateRecurringServiceAction(row.id, {
-        name: formData.get("name") as string,
-        amount: parseFloat(formData.get("amount") as string),
-      });
-    }
+    try {
+      let res;
 
-    if (res?.success) {
-      toast.success("Actualizado correctamente");
-      setIsEditOpen(false);
+      if (type === "transaction") {
+        res = await updateTransactionAction(row.id, {
+          date: new Date(formData.get("date") as string),
+          amount: parseFloat(formData.get("amount") as string),
+          description: formData.get("description") as string,
+          category: formData.get("category") as TransactionCategory,
+        });
+      } else if (type === "presupuesto") {
+        res = await updatePresupuestoAction(row.id, {
+          name: formData.get("name") as string,
+          clientId: parseInt(formData.get("clientId") as string),
+          totalAmount: parseFloat(formData.get("totalAmount") as string),
+          status: formData.get("status") as string,
+        });
+      } else if (type === "recurring") {
+        res = await updateRecurringServiceAction(row.id, {
+          name: formData.get("name") as string,
+          amount: parseFloat(formData.get("amount") as string),
+        });
+      }
+
+      if (res?.success) {
+        toast.success("Actualizado correctamente");
+        setIsEditOpen(false);
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -121,10 +140,12 @@ export function RowActions({ row, type, clients }: RowActionsProps) {
     if (type !== "presupuesto") return;
 
     const formData = new FormData(e.currentTarget);
-    let res;
+    setLoading(true);
 
-    if (type === "presupuesto") {
-      if (row.type === "ingreso") {
+    try {
+      let res;
+
+      if (type === "presupuesto" && row.type === "ingreso") {
         const client = clients?.find((c) => c.id === row.clientId);
         if (!client) {
           toast.error("Error al identificar la entidad");
@@ -132,23 +153,27 @@ export function RowActions({ row, type, clients }: RowActionsProps) {
         }
         res = await createRecurringServiceAction({
           name: formData.get("name") as string,
-          clientName: client.name,
+          clientId: client.id,
           amount: parseFloat(formData.get("amount") as string),
+          billingDay: parseInt(formData.get("billingDay") as string) || 1,
         });
-      } else {
+      } else if (type === "presupuesto") {
         res = await createRecurringFromPresupuestoAction({
           name: formData.get("name") as string,
           clientId: row.clientId!,
           amount: parseFloat(formData.get("amount") as string),
+          billingDay: parseInt(formData.get("billingDay") as string) || 1,
         });
       }
-    }
 
-    if (res?.success) {
-      toast.success("Operación recurrente creada con éxito");
-      setIsConvertOpen(false);
-    } else {
-      toast.error("Error al crear la operación recurrente");
+      if (res?.success) {
+        toast.success("Operación recurrente creada con éxito");
+        setIsConvertOpen(false);
+      } else {
+        toast.error("Error al crear la operación recurrente");
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -156,8 +181,8 @@ export function RowActions({ row, type, clients }: RowActionsProps) {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="p-0 w-8 h-8">
-            <MoreHorizontal className="w-4 h-4" />
+          <Button variant="ghost" className="p-0 w-8 h-8" disabled={loading}>
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <MoreHorizontal className="w-4 h-4" />}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
@@ -307,8 +332,8 @@ export function RowActions({ row, type, clients }: RowActionsProps) {
               </>
             )}
 
-            <Button type="submit" className="w-full">
-              Guardar Cambios
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Guardar Cambios"}
             </Button>
           </form>
         </DialogContent>
@@ -342,8 +367,19 @@ export function RowActions({ row, type, clients }: RowActionsProps) {
                 required
               />
             </div>
-            <Button type="submit" className="w-full">
-              Activar Recurrencia
+            <div className="space-y-2">
+              <Label>Día de cobro/pago</Label>
+              <Input
+                name="billingDay"
+                type="number"
+                min={1}
+                max={31}
+                defaultValue={1}
+                required
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Activar Recurrencia"}
             </Button>
           </form>
         </DialogContent>

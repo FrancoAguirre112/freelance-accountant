@@ -21,6 +21,7 @@ import {
 import { CsvExportButton } from "@/components/csv-export-button";
 import { formatSafeDate as fmtDate } from "@/lib/date-utils";
 import { SortableHeader, useSort } from "@/components/ui/sortable-header";
+import { SkeletonCells } from "@/components/ui/skeleton-row";
 
 interface TransactionWithRelations {
   id: number;
@@ -56,6 +57,7 @@ export function TransactionsTab({
   preFilteredData?: any[];
 }) {
   const [search, setSearch] = React.useState("");
+  const [loadingRows, setLoadingRows] = React.useState<Set<number>>(new Set());
   const { sort, onSort } = useSort();
   const {
     values: filters,
@@ -228,47 +230,64 @@ export function TransactionsTab({
                 const sourceName =
                   t.presupuesto?.name || "Movimiento Directo";
 
+                const isLoading = loadingRows.has(t.id);
                 return (
-                  <TableRow key={t.id}>
-                    <TableCell className="min-w-[100px]">
-                      {formatSafeDate(t.date, "dd/MM/yyyy")}
-                    </TableCell>
+                  <TableRow key={t.id} className={isLoading ? "animate-pulse" : ""}>
+                    {isLoading ? (
+                      <SkeletonCells widths={["w-20", "w-32", "w-16", "w-24", "w-16"]} />
+                    ) : (
+                      <>
+                        <TableCell className="min-w-[100px]">
+                          {formatSafeDate(t.date, "dd/MM/yyyy")}
+                        </TableCell>
 
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <span className="font-medium text-sm">
-                          {clientName}
-                        </span>
-                        <span className="text-muted-foreground text-xs">
-                          {sourceName}
-                        </span>
-                      </div>
-                    </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="font-medium text-sm">
+                              {clientName}
+                            </span>
+                            <span className="text-muted-foreground text-xs">
+                              {sourceName}
+                            </span>
+                          </div>
+                        </TableCell>
 
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={
-                          categoryColors[t.category as TransactionCategory] ||
-                          categoryColors.other
-                        }
-                      >
-                        {categoryLabels[t.category as TransactionCategory] ||
-                          t.category}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="font-medium text-muted-foreground">
-                      {t.description || "-"}
-                    </TableCell>
-                    <TableCell
-                      className={`font-bold text-right ${isExpense(t) ? "text-red-600" : "text-green-600"}`}
-                    >
-                      {isExpense(t) ? "- " : "+ "}$
-                      {Math.abs(t.amount).toFixed(2)}
-                    </TableCell>
-                    <TableCell>
-                      <RowActions row={t} type="transaction" />
-                    </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={
+                              categoryColors[t.category as TransactionCategory] ||
+                              categoryColors.other
+                            }
+                          >
+                            {categoryLabels[t.category as TransactionCategory] ||
+                              t.category}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-medium text-muted-foreground">
+                          {t.description || "-"}
+                        </TableCell>
+                        <TableCell
+                          className={`font-bold text-right ${isExpense(t) ? "text-red-600" : "text-green-600"}`}
+                        >
+                          {isExpense(t) ? "- " : "+ "}$
+                          {Math.abs(t.amount).toFixed(2)}
+                        </TableCell>
+                        <TableCell>
+                          <RowActions
+                            row={t}
+                            type="transaction"
+                            onLoadingChange={(l) => {
+                              setLoadingRows((prev) => {
+                                const next = new Set(prev);
+                                if (l) next.add(t.id); else next.delete(t.id);
+                                return next;
+                              });
+                            }}
+                          />
+                        </TableCell>
+                      </>
+                    )}
                   </TableRow>
                 );
               })

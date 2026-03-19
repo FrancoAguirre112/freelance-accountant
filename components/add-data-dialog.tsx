@@ -156,7 +156,7 @@ export function AddDataDialog({
     try {
       const res = await createRecurringServiceAction({
         name: formData.get("name") as string,
-        clientName: formData.get("clientName") as string,
+        clientId: parseInt(formData.get("clientName") as string),
         amount: parseFloat(formData.get("amount") as string),
         type: formData.get("recurringType") as "service" | "payment",
         billingDay: parseInt(formData.get("billingDay") as string) || 1,

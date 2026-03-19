@@ -35,6 +35,7 @@ import { TabSearch, parseSearch } from "@/components/tab-search";
 import { TabFilters, useTabFilters, type FilterField } from "@/components/tab-filters";
 import { CsvExportButton } from "@/components/csv-export-button";
 import { SortableHeader, useSort } from "@/components/ui/sortable-header";
+import { SkeletonCells } from "@/components/ui/skeleton-row";
 import { createTransactionAction } from "@/app/actions";
 
 const SEARCH_PREFIXES = [{ key: "e", label: "Entidad" }];
@@ -65,6 +66,7 @@ export function MaintenanceTab({
     Record<number, boolean>
   >({});
   const [search, setSearch] = React.useState("");
+  const [loadingRows, setLoadingRows] = React.useState<Set<number>>(new Set());
   const { sort, onSort } = useSort();
   const [generatingKey, setGeneratingKey] = React.useState<string | null>(null);
   const [monthModal, setMonthModal] = React.useState<{
@@ -435,6 +437,7 @@ export function MaintenanceTab({
                   return { ...m, paid, isCovered, isPartial };
                 });
 
+                const isRowLoading = loadingRows.has(item.serviceId);
                 return (
                   <React.Fragment key={item.serviceId}>
                     <TableRow
@@ -442,85 +445,99 @@ export function MaintenanceTab({
                         "hover:bg-muted/50 transition-colors",
                         expandedRows[item.serviceId] &&
                           "bg-muted/50 border-b-0",
+                        isRowLoading && "animate-pulse",
                       )}
                     >
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="w-6 h-6"
-                          onClick={() => toggleRow(item.serviceId)}
-                        >
-                          <ChevronRight
-                            className="w-4 h-4 animate-chevron"
-                            data-expanded={expandedRows[item.serviceId] ? "true" : "false"}
-                          />
-                        </Button>
-                      </TableCell>
-                      <TableCell
-                        className="cursor-pointer"
-                        onClick={() => toggleRow(item.serviceId)}
-                      >
-                        <div className="flex flex-col">
-                          <span className="font-medium">{item.clientName}</span>
-                          <span className="text-muted-foreground text-xs">
-                            {item.serviceName}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={
-                            isPayment
-                              ? "bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800"
-                              : "bg-green-100 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800"
-                          }
-                        >
-                          {isPayment ? "Egreso" : "Ingreso"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className={isPayment ? "text-red-600" : ""}>
-                        ${item.monthlyFee}
-                      </TableCell>
-                      <TableCell
-                        className={cn(
-                          "font-medium",
-                          item.totalCollected >= item.monthlyFee * activeMonths.length
-                            ? isPayment ? "text-red-600" : "text-green-600"
-                            : "",
-                        )}
-                      >
-                        ${item.totalCollected.toLocaleString()}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={cn("text-xs",
-                          item.dueStatus === "vencido"
-                            ? "bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800"
-                            : item.dueStatus === "por_vencer"
-                              ? "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-950 dark:text-yellow-300 dark:border-yellow-800"
-                              : "bg-muted text-muted-foreground border-border",
-                        )}>
-                          {item.nextDueDate.toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" })}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="gap-1">
-                          {monthsCovered === activeMonths.length &&
-                          activeMonths.length > 0 ? (
-                            <CheckCircle2 className="w-3 h-3 text-green-600" />
-                          ) : (
-                            <Clock className="w-3 h-3 text-muted-foreground" />
-                          )}
-                          {monthsCovered}/{activeMonths.length}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <MaintenanceRowActions
-                          service={item}
-                          clients={clients}
-                        />
-                      </TableCell>
+                      {isRowLoading ? (
+                        <SkeletonCells widths={["w-6", "w-32", "w-16", "w-12", "w-16", "w-20", "w-12"]} />
+                      ) : (
+                        <>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="w-6 h-6"
+                              onClick={() => toggleRow(item.serviceId)}
+                            >
+                              <ChevronRight
+                                className="w-4 h-4 animate-chevron"
+                                data-expanded={expandedRows[item.serviceId] ? "true" : "false"}
+                              />
+                            </Button>
+                          </TableCell>
+                          <TableCell
+                            className="cursor-pointer"
+                            onClick={() => toggleRow(item.serviceId)}
+                          >
+                            <div className="flex flex-col">
+                              <span className="font-medium">{item.clientName}</span>
+                              <span className="text-muted-foreground text-xs">
+                                {item.serviceName}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="outline"
+                              className={
+                                isPayment
+                                  ? "bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800"
+                                  : "bg-green-100 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800"
+                              }
+                            >
+                              {isPayment ? "Egreso" : "Ingreso"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className={isPayment ? "text-red-600" : ""}>
+                            ${item.monthlyFee}
+                          </TableCell>
+                          <TableCell
+                            className={cn(
+                              "font-medium",
+                              item.totalCollected >= item.monthlyFee * activeMonths.length
+                                ? isPayment ? "text-red-600" : "text-green-600"
+                                : "",
+                            )}
+                          >
+                            ${item.totalCollected.toLocaleString()}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={cn("text-xs",
+                              item.dueStatus === "vencido"
+                                ? "bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800"
+                                : item.dueStatus === "por_vencer"
+                                  ? "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-950 dark:text-yellow-300 dark:border-yellow-800"
+                                  : "bg-muted text-muted-foreground border-border",
+                            )}>
+                              {item.nextDueDate.toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" })}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="gap-1">
+                              {monthsCovered === activeMonths.length &&
+                              activeMonths.length > 0 ? (
+                                <CheckCircle2 className="w-3 h-3 text-green-600" />
+                              ) : (
+                                <Clock className="w-3 h-3 text-muted-foreground" />
+                              )}
+                              {monthsCovered}/{activeMonths.length}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <MaintenanceRowActions
+                              service={item}
+                              clients={clients}
+                              onLoadingChange={(l) => {
+                                setLoadingRows((prev) => {
+                                  const next = new Set(prev);
+                                  if (l) next.add(item.serviceId); else next.delete(item.serviceId);
+                                  return next;
+                                });
+                              }}
+                            />
+                          </TableCell>
+                        </>
+                      )}
                     </TableRow>
 
                     {expandedRows[item.serviceId] && (

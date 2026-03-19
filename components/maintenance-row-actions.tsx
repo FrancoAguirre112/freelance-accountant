@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { MoreHorizontal, Pencil, Trash } from "lucide-react";
+import { Loader2, MoreHorizontal, Pencil, Trash } from "lucide-react";
 import { toast } from "sonner";
 import {
   DropdownMenu,
@@ -62,41 +62,61 @@ interface MaintenanceService {
 export function MaintenanceRowActions({
   service,
   clients,
+  onLoadingChange,
 }: {
   service: MaintenanceService;
   clients: Client[];
+  onLoadingChange?: (loading: boolean) => void;
 }) {
   const [isEditOpen, setIsEditOpen] = React.useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
 
-  // --- HANDLERS ---
-  const handleDelete = async () => {
-    const res = await deleteRecurringServiceAction(service.serviceId);
-    if (res.success) {
-      toast.success("Operación eliminada correctamente");
-    } else {
-      toast.error("Error al eliminar");
+  const prevLoadingRef = React.useRef(false);
+  React.useEffect(() => {
+    if (prevLoadingRef.current !== loading) {
+      prevLoadingRef.current = loading;
+      onLoadingChange?.(loading);
     }
-    setIsDeleteOpen(false);
+  }, [loading, onLoadingChange]);
+
+  const handleDelete = async () => {
+    setLoading(true);
+    try {
+      const res = await deleteRecurringServiceAction(service.serviceId);
+      if (res.success) {
+        toast.success("Operación eliminada correctamente");
+      } else {
+        toast.error("Error al eliminar");
+      }
+      setIsDeleteOpen(false);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleEditSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
+    setLoading(true);
 
-    const res = await updateRecurringServiceAction(service.serviceId, {
-      name: formData.get("name") as string,
-      amount: parseFloat(formData.get("amount") as string),
-      clientId: Number(formData.get("clientId")),
-      type: formData.get("type") as "service" | "payment",
-      billingDay: parseInt(formData.get("billingDay") as string) || 1,
-    });
+    try {
+      const res = await updateRecurringServiceAction(service.serviceId, {
+        name: formData.get("name") as string,
+        amount: parseFloat(formData.get("amount") as string),
+        clientId: Number(formData.get("clientId")),
+        type: formData.get("type") as "service" | "payment",
+        billingDay: parseInt(formData.get("billingDay") as string) || 1,
+      });
 
-    if (res.success) {
-      toast.success("Operación actualizada");
-      setIsEditOpen(false);
-    } else {
-      toast.error("Error al actualizar");
+      if (res.success) {
+        toast.success("Operación actualizada");
+        setIsEditOpen(false);
+      } else {
+        toast.error("Error al actualizar");
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -104,9 +124,9 @@ export function MaintenanceRowActions({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="p-0 w-8 h-8">
+          <Button variant="ghost" className="p-0 w-8 h-8" disabled={loading}>
             <span className="sr-only">Abrir menú</span>
-            <MoreHorizontal className="w-4 h-4" />
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <MoreHorizontal className="w-4 h-4" />}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
@@ -186,7 +206,9 @@ export function MaintenanceRowActions({
               >
                 Cancelar
               </Button>
-              <Button type="submit">Guardar Cambios</Button>
+              <Button type="submit" disabled={loading}>
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Guardar Cambios"}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -211,8 +233,9 @@ export function MaintenanceRowActions({
             <AlertDialogAction
               onClick={handleDelete}
               className="bg-red-600 hover:bg-red-700"
+              disabled={loading}
             >
-              Eliminar
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Eliminar"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

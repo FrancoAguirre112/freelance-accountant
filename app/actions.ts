@@ -21,22 +21,6 @@ async function requireUserId(): Promise<string> {
   return session.user.id;
 }
 
-async function findOrCreateClient(name: string, userId: string): Promise<number> {
-  const existingClient = await db.query.clients.findFirst({
-    where: and(eq(clients.name, name), eq(clients.userId, userId)),
-  });
-
-  if (existingClient) {
-    return existingClient.id;
-  }
-
-  const newClient = await db
-    .insert(clients)
-    .values({ name, status: "active", userId })
-    .returning({ id: clients.id });
-
-  return newClient[0].id;
-}
 
 export async function importTransactionsAction(data: NewTransaction[]) {
   try {
@@ -183,18 +167,17 @@ export async function createTransactionAction(
 
 export async function createRecurringServiceAction(data: {
   name: string;
-  clientName: string;
+  clientId: number;
   amount: number;
   type?: "service" | "payment";
   billingDay?: number;
 }) {
   try {
     const userId = await requireUserId();
-    const clientId = await findOrCreateClient(data.clientName, userId);
 
     await db.insert(recurringServices).values({
       name: data.name,
-      clientId: clientId,
+      clientId: data.clientId,
       amount: data.amount,
       type: data.type || "service",
       billingDay: data.billingDay || 1,
@@ -214,6 +197,7 @@ export async function createRecurringFromPresupuestoAction(data: {
   name: string;
   clientId: number;
   amount: number;
+  billingDay?: number;
 }) {
   try {
     const userId = await requireUserId();
@@ -223,6 +207,7 @@ export async function createRecurringFromPresupuestoAction(data: {
       clientId: data.clientId,
       amount: data.amount,
       type: "payment",
+      billingDay: data.billingDay || 1,
       createdAt: new Date(),
       userId,
     });
