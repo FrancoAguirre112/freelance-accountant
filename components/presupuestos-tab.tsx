@@ -14,8 +14,10 @@ import { TabFilters, useTabFilters, type FilterField } from "@/components/tab-fi
 import { CsvExportButton } from "@/components/csv-export-button";
 import { SortableHeader, useSort } from "@/components/ui/sortable-header";
 import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
 import { SkeletonCells } from "@/components/ui/skeleton-row";
-import { updatePresupuestoAction } from "@/app/actions";
+import { updatePresupuestoAction, createTransactionAction } from "@/app/actions";
+import { toast } from "sonner";
 
 type Client = InferSelectModel<typeof clients>;
 type Transaction = InferSelectModel<typeof transactions>;
@@ -143,6 +145,7 @@ export function PresupuestosTab({
               <SortableHeader label="Progreso" sortKey="progress" sort={sort} onSort={onSort} />
               <SortableHeader label="Estado" sortKey="status" sort={sort} onSort={onSort} className="text-right" />
               <TableHead className="w-[70px] text-center">Activo</TableHead>
+              <TableHead className="w-[90px] text-center">Saldar</TableHead>
               <TableHead className="w-[50px]"></TableHead>
             </TableRow>
           </TableHeader>
@@ -171,7 +174,7 @@ export function PresupuestosTab({
               return (
                 <TableRow key={p.id} className={isRowLoading ? "animate-pulse" : ""}>
                   {isRowLoading ? (
-                    <SkeletonCells widths={["w-8", "w-32", "w-16", "w-16", "w-28", "w-20", "w-10"]} />
+                    <SkeletonCells widths={["w-8", "w-32", "w-16", "w-16", "w-28", "w-20", "w-10", "w-16"]} />
                   ) : (
                     <>
                       <TableCell className="text-center">
@@ -221,6 +224,48 @@ export function PresupuestosTab({
                           disabled={p.status === "finalizado"}
                         />
                       </TableCell>
+                      <TableCell className="text-center">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={
+                            p.status === "finalizado" ||
+                            totalPaid >= p.totalAmount ||
+                            p.totalAmount - totalPaid <= 0
+                          }
+                          onClick={async () => {
+                            const remaining = p.totalAmount - totalPaid;
+                            setLoadingRows((prev) => new Set(prev).add(p.id));
+                            try {
+                              const today = new Date();
+                              today.setUTCHours(12, 0, 0, 0);
+                              const res = await createTransactionAction({
+                                date: today,
+                                imputedDate: today,
+                                amount: remaining,
+                                presupuestoId: p.id,
+                                serviceId: null,
+                                category: "presupuesto",
+                                description: `Saldo — ${p.name}`,
+                                status: "paid",
+                              });
+                              if (res.success) {
+                                toast.success("Presupuesto saldado", {
+                                  description: `$${remaining.toLocaleString()} — ${p.name}`,
+                                });
+                              }
+                            } finally {
+                              setLoadingRows((prev) => {
+                                const next = new Set(prev);
+                                next.delete(p.id);
+                                return next;
+                              });
+                            }
+                          }}
+                        >
+                          Saldar
+                        </Button>
+                      </TableCell>
                       <TableCell>
                         <RowActions
                           row={p}
@@ -261,6 +306,7 @@ export function PresupuestosTab({
                   </span>
                 </div>
               </TableCell>
+              <TableCell />
               <TableCell />
               <TableCell />
               <TableCell />
