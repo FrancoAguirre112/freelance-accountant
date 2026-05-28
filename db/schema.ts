@@ -53,6 +53,9 @@ export const clients = sqliteTable("clients", {
   userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   status: text("status").default("active"),
+  kind: text("kind", { enum: ["customer", "collaborator", "vendor"] }).default(
+    "customer",
+  ),
 }, (table) => [
   index("clients_user_id_idx").on(table.userId),
 ]);

@@ -136,6 +136,7 @@ export function AddDataDialog({
       const res = await createClientAction({
         name: formData.get("name") as string,
         status: "active",
+        kind: formData.get("kind") as "customer" | "collaborator" | "vendor",
       });
 
       if (res.success) {
@@ -352,6 +353,23 @@ export function AddDataDialog({
               <div className="space-y-2">
                 <Label>Nombre de la Entidad / Empresa</Label>
                 <Input name="name" placeholder="Ej: Mermoz SAS" required />
+              </div>
+              <div className="space-y-2">
+                <Label>Tipo</Label>
+                <Select name="kind" defaultValue="customer">
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="customer">Cliente</SelectItem>
+                    <SelectItem value="collaborator">Colaborador</SelectItem>
+                    <SelectItem value="vendor">Proveedor</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Colaborador = persona a la que pagás (ej: programador
+                  contratado). Proveedor = servicio/insumo que pagás.
+                </p>
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Guardar Entidad"}

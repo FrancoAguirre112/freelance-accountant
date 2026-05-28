@@ -9,14 +9,19 @@ import {
   users,
 } from "@/db/schema";
 import { auth } from "@/auth";
+import { getTestSession, isE2E } from "@/lib/test-auth";
 import { revalidatePath } from "next/cache";
 import { type InferInsertModel, eq, and, between } from "drizzle-orm";
 
 type NewTransaction = Omit<InferInsertModel<typeof transactions>, "userId">;
 type TransactionCategory = "presupuesto" | "recurring" | "other";
 
+async function getSession() {
+  return isE2E() ? getTestSession() : await auth();
+}
+
 async function requireUserId(): Promise<string> {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) throw new Error("Not authenticated");
   return session.user.id;
 }
@@ -537,10 +542,50 @@ export async function getRecurringCoverageAction(from: Date, to: Date) {
   return results;
 }
 
+export async function getOutstandingPerEntityAction(opts?: {
+  kind?: "customer" | "collaborator" | "vendor";
+}) {
+  const userId = await requireUserId();
+  const clientConds = [eq(clients.userId, userId)];
+  if (opts?.kind) clientConds.push(eq(clients.kind, opts.kind));
+
+  const rows = await db.query.clients.findMany({
+    where: and(...clientConds),
+    with: {
+      presupuestos: {
+        where: eq(presupuestos.type, "egreso"),
+        with: { transactions: true },
+      },
+    },
+  });
+
+  return rows
+    .filter((c) => c.presupuestos.length > 0)
+    .map((c) => {
+      const totalOwed = c.presupuestos.reduce(
+        (s, p) => s + Math.abs(p.totalAmount),
+        0,
+      );
+      const totalPaid = c.presupuestos.reduce(
+        (s, p) =>
+          s + p.transactions.reduce((ts, t) => ts + Math.abs(t.amount), 0),
+        0,
+      );
+      return {
+        clientId: c.id,
+        clientName: c.name,
+        kind: c.kind,
+        totalOwed,
+        totalPaid,
+        outstanding: Math.max(0, totalOwed - totalPaid),
+      };
+    });
+}
+
 export async function setProfileTypeAction(
   profileType: "programador" | "marketing",
 ) {
-  const session = await auth();
+  const session = await getSession();
   if (!session?.user?.id) throw new Error("Not authenticated");
 
   await db

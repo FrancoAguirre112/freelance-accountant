@@ -15,19 +15,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { bulkSmartImportAction } from "@/app/actions";
 import { toast } from "sonner";
-
-// Interfaz que coincide con las columnas de tu CSV
-interface CSVRow {
-  TipoDato: string;
-  Nombre?: string;
-  Vinculo?: string;
-  Monto?: string;
-  Fecha?: string;
-  FechaImputada?: string;
-  Categoria?: string;
-  Concepto?: string;
-  Estado?: string;
-}
+import { parseImportRows, rowCountExcludingComments, type CSVRow } from "@/lib/csv";
 
 export function CSVImporter() {
   const [loading, setLoading] = React.useState(false);
@@ -128,98 +116,16 @@ export function CSVImporter() {
       header: true,
       skipEmptyLines: true,
       complete: async (results) => {
-        // Preparamos los contenedores de datos limpios
-        // Nota: Estos tipos coinciden con lo que espera bulkSmartImportAction
-        const payload = {
-          clients: [] as { name: string }[],
-          presupuestos: [] as {
-            name: string;
-            clientName: string;
-            totalAmount: number;
-            type: string;
-            status: string;
-          }[],
-          recurring: [] as {
-            name: string;
-            clientName: string;
-            amount: number;
-            type: string;
-          }[],
-          transactions: [] as {
-            date: Date;
-            imputedDate: Date;
-            amount: number;
-            category: string;
-            description: string;
-            targetName?: string;
-          }[],
-        };
-
-        // Filtrar líneas de comentario (comienzan con #)
-        const rows = results.data.filter(
-          (row) => !row.TipoDato?.trimStart().startsWith("#"),
-        );
-
-        rows.forEach((row) => {
-          // Normalización segura para evitar errores si la columna viene vacía
-          const type = row.TipoDato ? row.TipoDato.toLowerCase().trim() : "";
-          const name = row.Nombre ? row.Nombre.trim() : "";
-          const link = row.Vinculo ? row.Vinculo.trim() : "";
-          const amount = parseFloat(row.Monto || "0");
-
-          switch (type) {
-            case "cliente":
-              if (name) payload.clients.push({ name });
-              break;
-
-            case "presupuesto":
-              if (name && link) {
-                payload.presupuestos.push({
-                  name,
-                  clientName: link,
-                  totalAmount: amount,
-                  type: (row.Estado || "ingreso").toLowerCase().trim() === "egreso" ? "egreso" : "ingreso",
-                  status: "activo",
-                });
-              }
-              break;
-
-            case "recurrente":
-              if (name && link) {
-                const recType = (row.Estado || "service").toLowerCase().trim();
-                payload.recurring.push({
-                  name,
-                  clientName: link,
-                  amount,
-                  type: recType === "payment" ? "payment" : "service",
-                });
-              }
-              break;
-
-            case "movimiento":
-              if (row.Fecha) {
-                payload.transactions.push({
-                  date: new Date(row.Fecha + "T12:00:00Z"),
-                  imputedDate: row.FechaImputada
-                    ? new Date(row.FechaImputada + "T12:00:00Z")
-                    : new Date(row.Fecha + "T12:00:00Z"),
-                  amount,
-                  category: (row.Categoria || "other") as string,
-                  description: row.Concepto || "",
-                  // Si hay un nombre en la fila de movimiento, lo usamos para vincular
-                  targetName: name || undefined,
-                });
-              }
-              break;
-          }
-        });
+        // Mapeo puro de filas → payload (ver lib/csv.ts)
+        const payload = parseImportRows(results.data);
+        const rowCount = rowCountExcludingComments(results.data);
 
         // Enviamos todo al servidor para la resolución inteligente
         const res = await bulkSmartImportAction(payload);
 
         if (res.success) {
           toast.success("Importación Exitosa", {
-            description: `Se procesaron ${rows.length} filas y se vincularon automáticamente.`,
+            description: `Se procesaron ${rowCount} filas y se vincularon automáticamente.`,
           });
           setIsOpen(false);
         } else {

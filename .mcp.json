@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "fiscus": {
+      "command": "pnpm",
+      "args": ["exec", "tsx", "mcp/server.ts"]
+    }
+  }
+}

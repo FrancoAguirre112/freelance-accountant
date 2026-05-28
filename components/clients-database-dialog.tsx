@@ -45,12 +45,37 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { type InferSelectModel } from "drizzle-orm";
 import { clients } from "@/db/schema";
+import type { ClientOutstanding } from "@/lib/balances";
 
 type Client = InferSelectModel<typeof clients>;
+type Kind = "customer" | "collaborator" | "vendor";
 type SortKey = "name" | "status";
 type SortDir = "asc" | "desc";
 
-export function ClientsDatabaseDialog({ clients }: { clients: Client[] }) {
+const KIND_LABEL: Record<Kind, string> = {
+  customer: "Cliente",
+  collaborator: "Colaborador",
+  vendor: "Proveedor",
+};
+const KIND_VARIANT: Record<Kind, "default" | "secondary" | "outline"> = {
+  customer: "default",
+  collaborator: "secondary",
+  vendor: "outline",
+};
+const formatUSD = (n: number) =>
+  n.toLocaleString("es-AR", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
+
+export function ClientsDatabaseDialog({
+  clients,
+  outstandingMap,
+}: {
+  clients: Client[];
+  outstandingMap?: Record<number, ClientOutstanding>;
+}) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
@@ -109,6 +134,15 @@ export function ClientsDatabaseDialog({ clients }: { clients: Client[] }) {
     } finally {
       setCreating(false);
     }
+  };
+
+  const handleChangeKind = (client: Client, kind: Kind) => {
+    if (client.kind === kind) return;
+    toast.promise(updateClientAction(client.id, { kind }), {
+      loading: "Cambiando tipo...",
+      success: `Tipo actualizado a ${KIND_LABEL[kind]}`,
+      error: "Error al cambiar tipo",
+    });
   };
 
   const handleEditName = async (client: Client) => {
@@ -206,6 +240,7 @@ export function ClientsDatabaseDialog({ clients }: { clients: Client[] }) {
                     <SortIcon column="name" />
                   </button>
                 </TableHead>
+                <TableHead>Tipo</TableHead>
                 <TableHead>
                   <button
                     type="button"
@@ -223,7 +258,7 @@ export function ClientsDatabaseDialog({ clients }: { clients: Client[] }) {
               {filtered.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={3}
+                    colSpan={4}
                     className="py-8 text-center text-muted-foreground"
                   >
                     {search
@@ -232,9 +267,26 @@ export function ClientsDatabaseDialog({ clients }: { clients: Client[] }) {
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map((client) => (
+                filtered.map((client) => {
+                  const kind = (client.kind ?? "customer") as Kind;
+                  const owed = outstandingMap?.[client.id];
+                  return (
                   <TableRow key={client.id}>
-                    <TableCell className="font-medium">{client.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <div>{client.name}</div>
+                      {owed && owed.outstanding > 0 && (
+                        <div className="text-xs text-amber-600 dark:text-amber-400">
+                          Adeudado: {formatUSD(owed.outstanding)} · pagado{" "}
+                          {formatUSD(owed.totalPaid)} de{" "}
+                          {formatUSD(owed.totalOwed)}
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={KIND_VARIANT[kind]}>
+                        {KIND_LABEL[kind]}
+                      </Badge>
+                    </TableCell>
                     <TableCell>
                       <Badge
                         variant={
@@ -258,6 +310,17 @@ export function ClientsDatabaseDialog({ clients }: { clients: Client[] }) {
                           >
                             <Pencil className="mr-2 w-4 h-4" /> Editar nombre
                           </DropdownMenuItem>
+
+                          {(["customer", "collaborator", "vendor"] as Kind[])
+                            .filter((k) => k !== kind)
+                            .map((k) => (
+                              <DropdownMenuItem
+                                key={k}
+                                onClick={() => handleChangeKind(client, k)}
+                              >
+                                Marcar como {KIND_LABEL[k]}
+                              </DropdownMenuItem>
+                            ))}
 
                           {client.status === "active" ? (
                             <DropdownMenuItem
@@ -286,7 +349,8 @@ export function ClientsDatabaseDialog({ clients }: { clients: Client[] }) {
                       </DropdownMenu>
                     </TableCell>
                   </TableRow>
-                ))
+                  );
+                })
               )}
             </TableBody>
           </Table>

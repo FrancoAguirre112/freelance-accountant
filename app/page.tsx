@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { getTestSession, isE2E } from "@/lib/test-auth";
 import { DashboardTab } from "@/components/dashboard-tab";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { TransactionsTab } from "@/components/transactions-tab";
@@ -13,6 +14,7 @@ import { PresupuestosTab } from "@/components/presupuestos-tab";
 import { MaintenanceTab } from "@/components/maintenance-tab";
 import { AddDataDialog } from "@/components/add-data-dialog";
 import { ClientsDatabaseDialog } from "@/components/clients-database-dialog";
+import { computeOutstandingPerClient } from "@/lib/balances";
 import Image from "next/image";
 import { Montserrat } from "next/font/google";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -39,7 +41,7 @@ export default async function DashboardPage({
 }) {
   const params = await searchParams;
 
-  const session = await auth();
+  const session = isE2E() ? getTestSession() : await auth();
   const userId = session!.user.id;
 
   const [allClients, allPresupuestos, allServices] = await Promise.all([
@@ -66,6 +68,12 @@ export default async function DashboardPage({
     (p) => p.status === "activo",
   );
   const activeServices = allServices;
+
+  // Outstanding balance per entity (sum of egreso presupuestos minus paid).
+  // Server-component → client-component prop, so we ship a plain object map.
+  const outstandingByClient = Object.fromEntries(
+    computeOutstandingPerClient(allPresupuestos),
+  );
 
   // --- 1. QUERY DATES (Exact Boundaries for Database) ---
   // We need 00:00 to 23:59 to catch ALL transactions safely
@@ -124,7 +132,7 @@ export default async function DashboardPage({
       <div className="flex md:hidden items-center gap-2">
         <MobileNav
           userMenu={<UserMenu expand />}
-          entidadesButton={<ClientsDatabaseDialog clients={allClients} />}
+          entidadesButton={<ClientsDatabaseDialog clients={allClients} outstandingMap={outstandingByClient} />}
         />
       </div>
 
@@ -149,7 +157,7 @@ export default async function DashboardPage({
             presupuestosData={activePresupuestos}
             servicesData={activeServices}
           />
-          <ClientsDatabaseDialog clients={allClients} />
+          <ClientsDatabaseDialog clients={allClients} outstandingMap={outstandingByClient} />
           <div className="mx-1 bg-border w-[1px] h-8 shrink-0" />
           <ChangelogButton />
           <SettingsDialog />
