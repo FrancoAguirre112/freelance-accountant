@@ -20,6 +20,7 @@ import { applyDDL, resetDb, setAuthUser, testDb } from "../helpers/integration-d
 import {
   TEST_USER_ID,
   seedPresupuesto,
+  seedRecurring,
   seedUser,
 } from "../helpers/factories";
 
@@ -58,6 +59,34 @@ describe("createTransactionAction", () => {
       where: eq(transactions.presupuestoId, p.id),
     });
     expect(row?.amount).toBe(-120);
+  });
+
+  it("auto-negates a positive amount for a payment-type recurring service", async () => {
+    const svc = await seedRecurring(testDb, { type: "payment", amount: 100 });
+    await createTransactionAction({
+      date: new Date("2026-05-01T12:00:00Z"),
+      amount: 100,
+      category: "recurring",
+      serviceId: svc.id,
+    });
+    const row = await testDb.query.transactions.findFirst({
+      where: eq(transactions.serviceId, svc.id),
+    });
+    expect(row?.amount).toBe(-100);
+  });
+
+  it("leaves ingreso recurring service amounts positive", async () => {
+    const svc = await seedRecurring(testDb, { type: "service", amount: 50 });
+    await createTransactionAction({
+      date: new Date("2026-05-01T12:00:00Z"),
+      amount: 50,
+      category: "recurring",
+      serviceId: svc.id,
+    });
+    const row = await testDb.query.transactions.findFirst({
+      where: eq(transactions.serviceId, svc.id),
+    });
+    expect(row?.amount).toBe(50);
   });
 
   it("leaves ingreso presupuesto amounts positive", async () => {

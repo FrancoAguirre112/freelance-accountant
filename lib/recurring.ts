@@ -37,3 +37,35 @@ export function isServiceActiveInMonth(
   const monthEnd = new Date(Date.UTC(y, m, 0, 23, 59, 59, 999));
   return isServiceActiveInRange(service, monthStart, monthEnd);
 }
+
+// ---- coverage (sign-aware) ----
+// `payment`-type services store transactions as negative amounts (money out);
+// `service`-type services store them as positive (money in). For coverage we
+// want the unsigned "amount put toward the monthly obligation", so we flip
+// the sign for payment services. Net is used (not abs of each row) so
+// refunds correctly cancel out a payment.
+export type ServiceTypeLike = "service" | "payment" | string;
+
+export function coverageAmount(
+  serviceType: ServiceTypeLike,
+  rawSum: number,
+): number {
+  return serviceType === "payment" ? -rawSum : rawSum;
+}
+
+export function isMonthCovered(
+  serviceType: ServiceTypeLike,
+  rawSum: number,
+  monthlyFee: number,
+): boolean {
+  return coverageAmount(serviceType, rawSum) >= Math.abs(monthlyFee);
+}
+
+export function isMonthPartiallyPaid(
+  serviceType: ServiceTypeLike,
+  rawSum: number,
+  monthlyFee: number,
+): boolean {
+  const effective = coverageAmount(serviceType, rawSum);
+  return effective > 0 && effective < Math.abs(monthlyFee);
+}

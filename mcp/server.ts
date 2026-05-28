@@ -484,10 +484,14 @@ server.registerTool(
   "create_transaction",
   {
     description:
-      "Create a transaction. If linked to an egreso presupuesto, the amount is auto-negated; presupuesto status is auto-finalized when fully paid.",
+      "Create a transaction. SIGN CONVENTION: money IN is positive, money OUT is negative. You can pass a positive amount even for an expense — the server auto-negates when the row is linked to an `egreso` presupuesto OR a `payment`-type recurring service. Presupuesto status is auto-finalized when fully paid.",
     inputSchema: {
       date: z.string().describe("ISO date, e.g. 2026-03-15"),
-      amount: z.number(),
+      amount: z
+        .number()
+        .describe(
+          "Magnitude of the movement. Auto-negated for egreso presupuestos / payment-type recurrings.",
+        ),
       category: z.enum(["presupuesto", "recurring", "other"]),
       description: z.string().optional(),
       presupuestoId: z.number().int().optional(),
@@ -502,6 +506,14 @@ server.registerTool(
         where: eq(presupuestos.id, presupuestoId),
       });
       if (linked?.type === "egreso" && finalAmount > 0) {
+        finalAmount = -finalAmount;
+      }
+    }
+    if (serviceId !== undefined) {
+      const linked = await db.query.recurringServices.findFirst({
+        where: eq(recurringServices.id, serviceId),
+      });
+      if (linked?.type === "payment" && finalAmount > 0) {
         finalAmount = -finalAmount;
       }
     }

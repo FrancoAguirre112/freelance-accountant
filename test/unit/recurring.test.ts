@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  coverageAmount,
+  isMonthCovered,
+  isMonthPartiallyPaid,
   isServiceActiveInMonth,
   isServiceActiveInRange,
 } from "@/lib/recurring";
@@ -90,5 +93,68 @@ describe("isServiceActiveInMonth", () => {
         "2026-03",
       ),
     ).toBe(true);
+  });
+});
+
+describe("coverageAmount", () => {
+  it("returns the raw amount for income services", () => {
+    expect(coverageAmount("service", 80)).toBe(80);
+    expect(coverageAmount("service", 0)).toBe(0);
+  });
+
+  it("flips the sign for payment services so negative rows are positive coverage", () => {
+    expect(coverageAmount("payment", -100)).toBe(100);
+    expect(coverageAmount("payment", -50)).toBe(50);
+  });
+
+  it("treats a positive payment row as negative coverage (refund net-out)", () => {
+    // raw sum on payment service: -100 + 100 = 0  → effective 0 → not covered
+    expect(coverageAmount("payment", 0)).toBe(-0);
+    // raw sum on payment service: +100 alone → effective -100 → not covered
+    expect(coverageAmount("payment", 100)).toBe(-100);
+  });
+});
+
+describe("isMonthCovered", () => {
+  it("is true when a payment service has exactly one negative monthly fee", () => {
+    expect(isMonthCovered("payment", -100, 100)).toBe(true);
+  });
+
+  it("is false when a payment service has a refund cancelling the payment", () => {
+    expect(isMonthCovered("payment", 0, 100)).toBe(false);
+  });
+
+  it("is true when an income service has been fully cobrado", () => {
+    expect(isMonthCovered("service", 100, 100)).toBe(true);
+    expect(isMonthCovered("service", 150, 100)).toBe(true);
+  });
+
+  it("is false when income coverage is short", () => {
+    expect(isMonthCovered("service", 50, 100)).toBe(false);
+  });
+
+  it("treats the monthly fee as an absolute target", () => {
+    // even if someone stored monthlyFee as negative, we compare against |fee|
+    expect(isMonthCovered("payment", -100, -100)).toBe(true);
+  });
+});
+
+describe("isMonthPartiallyPaid", () => {
+  it("returns true for a partial income payment", () => {
+    expect(isMonthPartiallyPaid("service", 50, 100)).toBe(true);
+  });
+
+  it("returns true for a partial payment-service payment", () => {
+    expect(isMonthPartiallyPaid("payment", -50, 100)).toBe(true);
+  });
+
+  it("returns false at zero", () => {
+    expect(isMonthPartiallyPaid("service", 0, 100)).toBe(false);
+    expect(isMonthPartiallyPaid("payment", 0, 100)).toBe(false);
+  });
+
+  it("returns false when fully covered", () => {
+    expect(isMonthPartiallyPaid("payment", -100, 100)).toBe(false);
+    expect(isMonthPartiallyPaid("service", 100, 100)).toBe(false);
   });
 });

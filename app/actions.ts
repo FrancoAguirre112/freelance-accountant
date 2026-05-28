@@ -157,12 +157,22 @@ export async function createTransactionAction(
   const userId = await requireUserId();
   let amount = data.amount;
 
-  // Auto-negate amount for egreso presupuestos
+  // Auto-negate amount for egreso presupuestos…
   if (data.presupuestoId) {
     const linked = await db.query.presupuestos.findFirst({
       where: eq(presupuestos.id, data.presupuestoId),
     });
     if (linked?.type === "egreso" && amount > 0) {
+      amount = -amount;
+    }
+  }
+  // …and for payment-type recurring services (same convention: money OUT
+  // is stored negative so coverage math works without sign juggling).
+  if (data.serviceId) {
+    const linked = await db.query.recurringServices.findFirst({
+      where: eq(recurringServices.id, data.serviceId),
+    });
+    if (linked?.type === "payment" && amount > 0) {
       amount = -amount;
     }
   }

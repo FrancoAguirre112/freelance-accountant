@@ -28,6 +28,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getSafeMonthsInRange } from "@/lib/date-utils";
 import {
+  coverageAmount,
+  isMonthCovered,
+  isMonthPartiallyPaid,
   isServiceActiveInMonth,
   isServiceActiveInRange,
 } from "@/lib/recurring";
@@ -172,7 +175,7 @@ export function MaintenanceTab({
       const key = d.toISOString().slice(0, 7);
       if (!isServiceActiveInMonth(service, key)) continue;
       const paid = allPaymentsByMonth[key] || 0;
-      if (paid < service.amount) {
+      if (!isMonthCovered(service.type || "service", paid, service.amount)) {
         // Due date is billingDay of month AFTER the uncovered month
         const dueMonth = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
         const maxDay = new Date(dueMonth.getUTCFullYear(), dueMonth.getUTCMonth() + 1, 0).getDate();
@@ -246,7 +249,10 @@ export function MaintenanceTab({
     const key = `${serviceId}-${monthId}`;
     setGeneratingKey(key);
     try {
-      const amount = monthlyFee - paid;
+      // Coverage delta in unsigned terms, then flipped for payment-type so
+      // the server stores a negative row (mirrors the egreso convention).
+      const missing = monthlyFee - coverageAmount(serviceType, paid);
+      const amount = (serviceType === "payment" ? -1 : 1) * missing;
       const imputedDate = new Date(monthId + "-01T12:00:00Z");
       const today = new Date();
       today.setUTCHours(12, 0, 0, 0);
@@ -430,9 +436,17 @@ export function MaintenanceTab({
                 let monthsCovered = 0;
                 const details = activeMonths.map((m) => {
                   const paid = item.paymentsByMonth[m.id] || 0;
-                  const isCovered = paid >= item.monthlyFee;
+                  const isCovered = isMonthCovered(
+                    item.serviceType,
+                    paid,
+                    item.monthlyFee,
+                  );
                   if (isCovered) monthsCovered++;
-                  const isPartial = paid > 0 && paid < item.monthlyFee;
+                  const isPartial = isMonthPartiallyPaid(
+                    item.serviceType,
+                    paid,
+                    item.monthlyFee,
+                  );
                   return { ...m, paid, isCovered, isPartial };
                 });
 
@@ -493,7 +507,8 @@ export function MaintenanceTab({
                           <TableCell
                             className={cn(
                               "font-medium",
-                              item.totalCollected >= item.monthlyFee * activeMonths.length
+                              coverageAmount(item.serviceType, item.totalCollected) >=
+                                item.monthlyFee * activeMonths.length
                                 ? isPayment ? "text-red-600" : "text-green-600"
                                 : "",
                             )}
@@ -603,11 +618,11 @@ export function MaintenanceTab({
                                         ? "text-red-700 dark:text-red-400"
                                         : "text-green-700 dark:text-green-400",
                                     )}>
-                                      {isPayment ? "Pagado" : "Cobrado"} (${d.paid.toLocaleString()}/${item.monthlyFee})
+                                      {isPayment ? "Pagado" : "Cobrado"} (${coverageAmount(item.serviceType, d.paid).toLocaleString()}/${item.monthlyFee})
                                     </span>
                                   ) : d.isPartial ? (
                                     <span className="font-bold text-yellow-700 dark:text-yellow-400 text-xs">
-                                      Parcial (${d.paid.toLocaleString()}/${item.monthlyFee})
+                                      Parcial (${coverageAmount(item.serviceType, d.paid).toLocaleString()}/${item.monthlyFee})
                                     </span>
                                   ) : (
                                     <span className="font-medium text-muted-foreground text-xs">
@@ -640,7 +655,11 @@ export function MaintenanceTab({
         <DialogContent className="sm:max-w-md">
           {monthModal && (() => {
             const isPayment = monthModal.serviceType === "payment";
-            const remaining = monthModal.monthlyFee - monthModal.paid;
+            const effectivePaid = coverageAmount(
+              monthModal.serviceType,
+              monthModal.paid,
+            );
+            const remaining = monthModal.monthlyFee - effectivePaid;
             const canGenerate = !monthModal.isCovered;
             const cardKey = `${monthModal.serviceId}-${monthModal.monthId}`;
             const isGenerating = generatingKey === cardKey;
@@ -657,7 +676,7 @@ export function MaintenanceTab({
                   <div className="flex items-center justify-between p-3 rounded-md bg-muted/50">
                     <span className="text-sm text-muted-foreground">{isPayment ? "Pagado" : "Cobrado"}</span>
                     <span className="font-bold text-lg">
-                      ${monthModal.paid.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">/ ${monthModal.monthlyFee.toLocaleString()}</span>
+                      ${effectivePaid.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">/ ${monthModal.monthlyFee.toLocaleString()}</span>
                     </span>
                   </div>
 
