@@ -103,17 +103,19 @@ describe("sendRecurringRemindersAction", () => {
     expect(JSON.stringify(body.blocks)).toContain("Hosting");
   });
 
-  it("skips a service already paid this month", async () => {
+  it("skips a service when last month's cycle is already paid (arrears)", async () => {
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(new Response("ok", { status: 200 }));
 
     await setSlackWebhookAction("https://hooks.slack.com/services/x");
     const s = await seedRecurring(testDb, { billingDay: 5 });
+    // Paid May 3, imputed to April → satisfies the May 5 arrears reminder.
     await seedTransaction(testDb, {
       category: "recurring",
       serviceId: s.id,
       date: new Date("2026-05-03T12:00:00Z"),
+      imputedDate: new Date("2026-04-03T12:00:00Z"),
     });
 
     const res = await sendRecurringRemindersAction({

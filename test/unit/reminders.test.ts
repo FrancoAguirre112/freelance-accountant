@@ -31,7 +31,7 @@ describe("findDueReminders", () => {
     expect(findDueReminders([], [], today)).toEqual([]);
   });
 
-  it("includes a service whose billingDay matches today and is unpaid this month", () => {
+  it("includes a service whose billingDay matches today and last month is unpaid", () => {
     const due = findDueReminders([svc()], [], today);
     expect(due).toHaveLength(1);
     expect(due[0]).toMatchObject({
@@ -49,18 +49,30 @@ describe("findDueReminders", () => {
     ).toEqual([]);
   });
 
-  it("excludes a service already paid this calendar month", () => {
+  it("excludes a service whose previous month was already paid (arrears)", () => {
+    // today=May 5 → reminder asks 'is April paid?'. A transaction imputed
+    // to April should satisfy it.
     const paid = txn({
-      date: new Date("2026-05-02T12:00:00Z"),
+      date: new Date("2026-05-04T12:00:00Z"),
+      imputedDate: new Date("2026-04-04T12:00:00Z"),
     });
     expect(findDueReminders([svc()], [paid], today)).toEqual([]);
   });
 
-  it("uses imputedDate over date when both are present", () => {
-    // Real date is in April, but imputed to May → should count as paid for May
+  it("does NOT count a current-month-imputed payment toward last month", () => {
+    // A transaction imputed to MAY does not satisfy the reminder firing on
+    // May 5 — that reminder is asking about April under arrears.
     const paid = txn({
-      date: new Date("2026-04-30T12:00:00Z"),
-      imputedDate: new Date("2026-05-01T12:00:00Z"),
+      date: new Date("2026-05-02T12:00:00Z"),
+      imputedDate: new Date("2026-05-02T12:00:00Z"),
+    });
+    expect(findDueReminders([svc()], [paid], today)).toHaveLength(1);
+  });
+
+  it("uses imputedDate over date when both are present", () => {
+    const paid = txn({
+      date: new Date("2026-05-30T12:00:00Z"),
+      imputedDate: new Date("2026-04-15T12:00:00Z"),
     });
     expect(findDueReminders([svc()], [paid], today)).toEqual([]);
   });

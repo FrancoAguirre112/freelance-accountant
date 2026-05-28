@@ -27,6 +27,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import { and, between, desc, eq } from "drizzle-orm";
+import { subMonths } from "date-fns";
 import { z } from "zod";
 import * as schema from "@/db/schema";
 import {
@@ -484,7 +485,10 @@ server.registerTool(
   "create_transaction",
   {
     description:
-      "Create a transaction. SIGN CONVENTION: money IN is positive, money OUT is negative. You can pass a positive amount even for an expense — the server auto-negates when the row is linked to an `egreso` presupuesto OR a `payment`-type recurring service. Presupuesto status is auto-finalized when fully paid.",
+      "Create a transaction.\n" +
+      "• SIGN: money in = positive, money out = negative. You can pass a positive `amount` even for an expense — the server auto-negates when the row is linked to an `egreso` presupuesto OR a `payment`-type recurring service.\n" +
+      "• IMPUTED DATE (recurring): when `category` is `recurring` and `imputedDate` is omitted, the server defaults it to (`date` − 1 month) — paid-in-arrears convention (a payment on May 4 credits April). If you really want the payment to count for the same month it was made, pass `imputedDate` equal to `date`.\n" +
+      "• Presupuesto status is auto-finalized when fully paid.",
     inputSchema: {
       date: z.string().describe("ISO date, e.g. 2026-03-15"),
       amount: z
@@ -496,7 +500,12 @@ server.registerTool(
       description: z.string().optional(),
       presupuestoId: z.number().int().optional(),
       serviceId: z.number().int().optional(),
-      imputedDate: z.string().optional(),
+      imputedDate: z
+        .string()
+        .describe(
+          "ISO date. For recurring rows, defaults to (date − 1 month) when omitted.",
+        )
+        .optional(),
     },
   },
   async ({ date, amount, category, description, presupuestoId, serviceId, imputedDate }) => {
@@ -517,11 +526,17 @@ server.registerTool(
         finalAmount = -finalAmount;
       }
     }
+    const parsedDate = parseDate(date);
+    const finalImputed = imputedDate
+      ? parseDate(imputedDate)
+      : category === "recurring"
+        ? subMonths(parsedDate, 1)
+        : null;
     const [row] = await db
       .insert(transactions)
       .values({
-        date: parseDate(date),
-        imputedDate: imputedDate ? parseDate(imputedDate) : null,
+        date: parsedDate,
+        imputedDate: finalImputed,
         amount: finalAmount,
         category,
         description: description ?? null,

@@ -12,6 +12,7 @@ import { auth } from "@/auth";
 import { getTestSession, isE2E } from "@/lib/test-auth";
 import { revalidatePath } from "next/cache";
 import { type InferInsertModel, eq, and, between } from "drizzle-orm";
+import { subMonths } from "date-fns";
 import {
   buildSlackMessage,
   findDueReminders,
@@ -156,6 +157,14 @@ export async function createTransactionAction(
 ) {
   const userId = await requireUserId();
   let amount = data.amount;
+  // Paid-in-arrears convention: a recurring transaction without an explicit
+  // imputedDate is assumed to be paying for the PREVIOUS month's billing
+  // cycle. e.g. a $200 maintenance receipt landing May 4 is credited to
+  // April. Callers who want a different month must pass imputedDate.
+  let imputedDate: Date | null | undefined = data.imputedDate;
+  if (data.category === "recurring" && !imputedDate && data.date) {
+    imputedDate = subMonths(new Date(data.date), 1);
+  }
 
   // Auto-negate amount for egreso presupuestos…
   if (data.presupuestoId) {
@@ -177,7 +186,7 @@ export async function createTransactionAction(
     }
   }
 
-  await db.insert(transactions).values({ ...data, amount, userId });
+  await db.insert(transactions).values({ ...data, amount, imputedDate, userId });
   if (data.presupuestoId) {
     await checkAndFinalizePresupuesto(data.presupuestoId);
   }

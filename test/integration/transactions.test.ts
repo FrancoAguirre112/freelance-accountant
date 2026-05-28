@@ -89,6 +89,48 @@ describe("createTransactionAction", () => {
     expect(row?.amount).toBe(50);
   });
 
+  it("defaults imputedDate to (date − 1 month) for recurring transactions", async () => {
+    const svc = await seedRecurring(testDb, { type: "service", amount: 200 });
+    await createTransactionAction({
+      date: new Date("2026-05-04T12:00:00Z"),
+      amount: 200,
+      category: "recurring",
+      serviceId: svc.id,
+    });
+    const row = await testDb.query.transactions.findFirst({
+      where: eq(transactions.serviceId, svc.id),
+    });
+    expect(row?.imputedDate?.toISOString().slice(0, 7)).toBe("2026-04");
+  });
+
+  it("respects an explicit imputedDate even for recurring transactions", async () => {
+    const svc = await seedRecurring(testDb, { type: "service", amount: 200 });
+    await createTransactionAction({
+      date: new Date("2026-05-04T12:00:00Z"),
+      imputedDate: new Date("2026-05-04T12:00:00Z"),
+      amount: 200,
+      category: "recurring",
+      serviceId: svc.id,
+    });
+    const row = await testDb.query.transactions.findFirst({
+      where: eq(transactions.serviceId, svc.id),
+    });
+    expect(row?.imputedDate?.toISOString().slice(0, 7)).toBe("2026-05");
+  });
+
+  it("does NOT shift imputedDate for non-recurring transactions", async () => {
+    await createTransactionAction({
+      date: new Date("2026-05-04T12:00:00Z"),
+      amount: 10,
+      category: "other",
+      description: "misc",
+    });
+    const row = await testDb.query.transactions.findFirst({
+      where: eq(transactions.description, "misc"),
+    });
+    expect(row?.imputedDate).toBeNull();
+  });
+
   it("leaves ingreso presupuesto amounts positive", async () => {
     const p = await seedPresupuesto(testDb, { type: "ingreso" });
     await createTransactionAction({

@@ -75,13 +75,23 @@ export function AddDataDialog({
     const formData = new FormData(form);
 
     try {
+      // For non-recurring entries, default imputedDate to the actual date.
+      // For recurring entries we leave it `undefined` so the server's
+      // paid-in-arrears default (date − 1 month) kicks in.
+      const rawImputed = formData.get("imputedDate") as string | null;
+      const rawDate = formData.get("date") as string;
+      const category = formData.get("category") as TransactionCategory;
+      const imputedDate = rawImputed
+        ? new Date(rawImputed + "T12:00:00Z")
+        : category === "recurring"
+          ? undefined
+          : new Date(rawDate + "T12:00:00Z");
+
       const res = await createTransactionAction({
-        date: new Date(formData.get("date") as string + "T12:00:00Z"),
-        imputedDate: formData.get("imputedDate")
-          ? new Date(formData.get("imputedDate") as string + "T12:00:00Z")
-          : new Date(formData.get("date") as string + "T12:00:00Z"),
+        date: new Date(rawDate + "T12:00:00Z"),
+        imputedDate,
         amount: parseFloat(formData.get("amount") as string),
-        category: formData.get("category") as TransactionCategory,
+        category,
         description: formData.get("description") as string,
         presupuestoId: formData.get("presupuestoId")
           ? Number(formData.get("presupuestoId"))

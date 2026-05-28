@@ -1,14 +1,17 @@
 // Pure helpers for the recurring-payments Slack reminder.
 //
-// "Due today" rule (kept intentionally simple): a recurring service is due
-// today if all of the following hold —
+// "Due today" rule (paid-in-arrears): a recurring service is due today if
+// all of the following hold —
 //   1. `today` falls inside the service's lifecycle (startDate / endDate).
 //   2. `today.getUTCDate() === service.billingDay`.
-//   3. The service has no `recurring` transaction with an imputedDate (or
-//      date, if imputed is null) in the same calendar month as today.
+//   3. The service has no `recurring` transaction whose imputedDate (or
+//      date, if imputed is null) is in the PREVIOUS calendar month. The
+//      billing day is when payment is expected FOR the prior month's
+//      cycle, matching the imputedDate default applied at create time.
 //
 // The cron route runs once per day; the rule fires once per cycle per
-// service (the day's transactions cover the month immediately after).
+// service.
+import { subMonths } from "date-fns";
 import { isServiceActiveInRange } from "./recurring";
 
 export interface ReminderService {
@@ -51,18 +54,21 @@ export function findDueReminders(
   today: Date,
 ): DueReminder[] {
   const todayDom = today.getUTCDate();
-  // Active-lifecycle filter: the single-day "range" is today → today.
+  // The cycle expected to be paid TODAY belongs to last month under the
+  // arrears convention. Reminder fires if no transaction is imputed to
+  // that previous month yet.
+  const previousMonth = subMonths(today, 1);
   return services
     .filter((s) => isServiceActiveInRange(s, today, today))
     .filter((s) => s.billingDay === todayDom)
     .filter((s) => {
-      const paidThisMonth = transactions.some(
+      const paidForLastMonth = transactions.some(
         (t) =>
           t.serviceId === s.id &&
           t.category === "recurring" &&
-          sameMonth(t.imputedDate ?? t.date, today),
+          sameMonth(t.imputedDate ?? t.date, previousMonth),
       );
-      return !paidThisMonth;
+      return !paidForLastMonth;
     })
     .map((s) => ({
       serviceId: s.id,
