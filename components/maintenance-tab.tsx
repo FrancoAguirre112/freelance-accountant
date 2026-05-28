@@ -58,7 +58,14 @@ interface MaintenanceTabProps {
   from: Date;
   to: Date;
   clients: Client[];
+  /** Transactions filtered to the dashboard's date range. */
   transactions: Transaction[];
+  /**
+   * ALL recurring transactions for this user, unfiltered by the dashboard
+   * date range. Used for the next-due-date walker and last-paid date so
+   * history before the current view is still visible.
+   */
+  allRecurringTransactions: Transaction[];
   services: Service[];
 }
 
@@ -67,6 +74,7 @@ export function MaintenanceTab({
   to,
   clients,
   transactions,
+  allRecurringTransactions,
   services,
 }: MaintenanceTabProps) {
   const [expandedRows, setExpandedRows] = React.useState<
@@ -112,9 +120,9 @@ export function MaintenanceTab({
       t.date <= new Date(to.setUTCHours(23, 59, 59, 999))
   );
 
-  const allRecurringTransactions = transactions.filter(
-    (t) => t.category === "recurring"
-  );
+  // `allRecurringTransactions` comes from the parent (full history); the
+  // local filter that used to live here was a bug — it filtered to the
+  // dashboard's date range and made the walker blind to earlier payments.
 
   // Only show services whose lifecycle intersects the selected date range.
   const activeServices = services.filter((service) =>

@@ -113,6 +113,24 @@ export default async function DashboardPage({
     orderBy: [desc(transactions.date)],
   });
 
+  // Separate fetch: ALL recurring transactions for this user (no date filter).
+  // MaintenanceTab needs full history for the next-due-date walker — limiting
+  // to the dashboard range hides earlier payments and bogusly flags older
+  // months as uncovered.
+  const allRecurringRaw = await db.query.transactions.findMany({
+    where: and(
+      eq(transactions.userId, userId),
+      eq(transactions.category, "recurring"),
+    ),
+  });
+  const allRecurringTransactions = allRecurringRaw.map((t) => {
+    const safe = new Date(t.date);
+    safe.setUTCHours(12, 0, 0, 0);
+    const safeImp = t.imputedDate ? new Date(t.imputedDate) : null;
+    if (safeImp) safeImp.setUTCHours(12, 0, 0, 0);
+    return { ...t, date: safe, imputedDate: safeImp };
+  });
+
   // 4. NORMALIZE OUTPUT (For Dashboard/Transactions List)
   const allTransactions = rawTransactions.map((t) => {
     const safeDate = new Date(t.date);
@@ -210,6 +228,7 @@ export default async function DashboardPage({
             to={displayTo}
             clients={allClients}
             transactions={allTransactions}
+            allRecurringTransactions={allRecurringTransactions}
             services={allServices}
           />
         </TabsContent>
