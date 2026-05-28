@@ -26,8 +26,9 @@ export default async function middleware(
 
     const isLoginPage = nextUrl.pathname === "/login";
     const isAuthApi = nextUrl.pathname.startsWith("/api/auth");
+    const isCronApi = nextUrl.pathname.startsWith("/api/cron");
 
-    if (isAuthApi) return NextResponse.next();
+    if (isAuthApi || isCronApi) return NextResponse.next();
 
     if (isLoginPage) {
       if (isAuthenticated) {

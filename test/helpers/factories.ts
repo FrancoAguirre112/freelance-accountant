@@ -64,6 +64,8 @@ export async function seedRecurring(
     type: "service" | "payment";
     billingDay: number;
     userId: string;
+    startDate: Date;
+    endDate: Date | null;
   }> = {},
 ) {
   const [row] = await db
@@ -75,6 +77,8 @@ export async function seedRecurring(
       type: overrides.type ?? "service",
       billingDay: overrides.billingDay ?? 1,
       createdAt: new Date("2026-01-01T12:00:00Z"),
+      startDate: overrides.startDate ?? new Date("2026-01-01T12:00:00Z"),
+      endDate: overrides.endDate ?? null,
       userId: overrides.userId ?? TEST_USER_ID,
     })
     .returning();

@@ -12,6 +12,9 @@ export const users = sqliteTable("user", {
   emailVerified: integer("emailVerified", { mode: "timestamp_ms" }),
   image: text("image"),
   profileType: text("profileType", { enum: ["programador", "marketing"] }),
+  // Slack incoming-webhook URL used by the daily recurring-payments reminder
+  // job. Null = the user opted out.
+  slackWebhookUrl: text("slackWebhookUrl"),
 });
 
 export const accounts = sqliteTable("account", {
@@ -81,6 +84,11 @@ export const recurringServices = sqliteTable("recurring_services", {
   type: text("type", { enum: ["service", "payment"] }).notNull().default("service"),
   billingDay: integer("billing_day").notNull().default(1),
   createdAt: integer("created_at", { mode: "timestamp" }),
+  // Business-meaning lifecycle: the recurrence is active only while
+  // startDate <= now <= (endDate ?? +infinity). Used to hide ended
+  // services from past/future date ranges in the dashboard.
+  startDate: integer("start_date", { mode: "timestamp" }).notNull(),
+  endDate: integer("end_date", { mode: "timestamp" }),
 }, (table) => [
   index("recurring_services_user_id_idx").on(table.userId),
 ]);

@@ -150,4 +150,47 @@ describe("getRecurringCoverageAction", () => {
     const cov = result.find((r) => r.serviceId === s.id)!;
     expect(cov.paymentsByMonth).toEqual({ "2026-05": 40 });
   });
+
+  it("excludes a service that ended before the queried range", async () => {
+    await seedRecurring(testDb, {
+      name: "Past client",
+      startDate: new Date("2025-01-01T12:00:00Z"),
+      endDate: new Date("2025-12-31T12:00:00Z"),
+    });
+    const ongoing = await seedRecurring(testDb, { name: "Ongoing" });
+
+    const result = await getRecurringCoverageAction(
+      new Date("2026-03-01T00:00:00Z"),
+      new Date("2026-03-31T00:00:00Z"),
+    );
+    expect(result.map((r) => r.serviceName)).toEqual(["Ongoing"]);
+    expect(result[0].serviceId).toBe(ongoing.id);
+  });
+
+  it("excludes a service that starts after the queried range", async () => {
+    await seedRecurring(testDb, {
+      name: "Future",
+      startDate: new Date("2027-01-01T12:00:00Z"),
+    });
+    await seedRecurring(testDb, { name: "Now" });
+
+    const result = await getRecurringCoverageAction(
+      new Date("2026-03-01T00:00:00Z"),
+      new Date("2026-03-31T00:00:00Z"),
+    );
+    expect(result.map((r) => r.serviceName)).toEqual(["Now"]);
+  });
+
+  it("includes a service whose end date is mid-range", async () => {
+    await seedRecurring(testDb, {
+      name: "Ended mid-range",
+      startDate: new Date("2026-01-01T12:00:00Z"),
+      endDate: new Date("2026-03-15T12:00:00Z"),
+    });
+    const result = await getRecurringCoverageAction(
+      new Date("2026-03-01T00:00:00Z"),
+      new Date("2026-03-31T00:00:00Z"),
+    );
+    expect(result.map((r) => r.serviceName)).toEqual(["Ended mid-range"]);
+  });
 });

@@ -27,6 +27,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getSafeMonthsInRange } from "@/lib/date-utils";
+import {
+  isServiceActiveInMonth,
+  isServiceActiveInRange,
+} from "@/lib/recurring";
 import { cn } from "@/lib/utils";
 import { MaintenanceRowActions } from "@/components/maintenance-row-actions";
 import { type InferSelectModel } from "drizzle-orm";
@@ -109,11 +113,10 @@ export function MaintenanceTab({
     (t) => t.category === "recurring"
   );
 
-  // Only show services that existed within the selected date range
-  const activeServices = services.filter((service) => {
-    if (!service.createdAt) return true; // existing services without createdAt
-    return service.createdAt <= to;
-  });
+  // Only show services whose lifecycle intersects the selected date range.
+  const activeServices = services.filter((service) =>
+    isServiceActiveInRange(service, from, to),
+  );
 
   const data = activeServices.map((service) => {
     const serviceTrans = relatedTransactions.filter(
@@ -162,16 +165,12 @@ export function MaintenanceTab({
     // Find the first uncovered month, then due date = billingDay of the NEXT month
     // (e.g. Feb service is due on billingDay of March, Mar service is due on billingDay of April)
     // Only look back 1 month (in case billing day hasn't passed yet this month)
-    // Skip months before the service was created
-    const serviceCreatedMonth = service.createdAt
-      ? service.createdAt.toISOString().slice(0, 7)
-      : null;
+    // Skip months outside the service lifecycle
     let found = false;
     for (let offset = -1; offset <= 1; offset++) {
       const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1));
       const key = d.toISOString().slice(0, 7);
-      // Skip months before service existed
-      if (serviceCreatedMonth && key < serviceCreatedMonth) continue;
+      if (!isServiceActiveInMonth(service, key)) continue;
       const paid = allPaymentsByMonth[key] || 0;
       if (paid < service.amount) {
         // Due date is billingDay of month AFTER the uncovered month
@@ -209,7 +208,8 @@ export function MaintenanceTab({
       nextDueDate,
       billingDay,
       dueStatus,
-      createdAt: service.createdAt,
+      startDate: service.startDate,
+      endDate: service.endDate,
     };
   });
 
@@ -297,14 +297,13 @@ export function MaintenanceTab({
   const serviceItems = filteredData.filter((d) => d.serviceType === "service");
   const paymentItems = filteredData.filter((d) => d.serviceType === "payment");
 
-  const getActiveMonthCount = (item: typeof filteredData[0]) => {
-    const createdMonth = item.createdAt
-      ? item.createdAt.toISOString().slice(0, 7)
-      : null;
-    return createdMonth
-      ? months.filter((m) => m.id >= createdMonth).length
-      : months.length;
-  };
+  const getActiveMonthCount = (item: typeof filteredData[0]) =>
+    months.filter((m) =>
+      isServiceActiveInMonth(
+        { startDate: item.startDate, endDate: item.endDate },
+        m.id,
+      ),
+    ).length;
 
   const totalIncome = serviceItems.reduce(
     (acc, curr) => acc + curr.monthlyFee * getActiveMonthCount(curr),
@@ -421,13 +420,13 @@ export function MaintenanceTab({
             ) : (
               sortedData.map((item) => {
                 const isPayment = item.serviceType === "payment";
-                // Only show months from when the service was created
-                const createdMonth = item.createdAt
-                  ? item.createdAt.toISOString().slice(0, 7)
-                  : null;
-                const activeMonths = createdMonth
-                  ? months.filter((m) => m.id >= createdMonth)
-                  : months;
+                // Only show months inside the service lifecycle
+                const activeMonths = months.filter((m) =>
+                  isServiceActiveInMonth(
+                    { startDate: item.startDate, endDate: item.endDate },
+                    m.id,
+                  ),
+                );
                 let monthsCovered = 0;
                 const details = activeMonths.map((m) => {
                   const paid = item.paymentsByMonth[m.id] || 0;
@@ -548,16 +547,24 @@ export function MaintenanceTab({
                               Detalle Mensual
                             </h4>
                             <div className="gap-3 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6">
-                              {/* Inactive months before service was created */}
-                              {months.filter((m) => createdMonth && m.id < createdMonth).map((m, idx) => (
-                                <div
-                                  key={`inactive-${idx}`}
-                                  className="flex flex-col items-center p-3 border border-dashed border-border/50 rounded-md text-sm text-center opacity-40"
-                                >
-                                  <span className="mb-1 font-medium text-muted-foreground">{m.label}</span>
-                                  <span className="text-muted-foreground/60 text-xs">No activo</span>
-                                </div>
-                              ))}
+                              {/* Months outside the service lifecycle */}
+                              {months
+                                .filter(
+                                  (m) =>
+                                    !isServiceActiveInMonth(
+                                      { startDate: item.startDate, endDate: item.endDate },
+                                      m.id,
+                                    ),
+                                )
+                                .map((m, idx) => (
+                                  <div
+                                    key={`inactive-${idx}`}
+                                    className="flex flex-col items-center p-3 border border-dashed border-border/50 rounded-md text-sm text-center opacity-40"
+                                  >
+                                    <span className="mb-1 font-medium text-muted-foreground">{m.label}</span>
+                                    <span className="text-muted-foreground/60 text-xs">No activo</span>
+                                  </div>
+                                ))}
                               {details.map((d, idx) => {
                                 const monthTransactions = item.transactionsByMonth[d.id] || [];
 

@@ -3,13 +3,13 @@ import { mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 
 const DDL = [
-  `CREATE TABLE IF NOT EXISTS "user" (id TEXT PRIMARY KEY NOT NULL, name TEXT, email TEXT UNIQUE, emailVerified INTEGER, image TEXT, profileType TEXT);`,
+  `CREATE TABLE IF NOT EXISTS "user" (id TEXT PRIMARY KEY NOT NULL, name TEXT, email TEXT UNIQUE, emailVerified INTEGER, image TEXT, profileType TEXT, slackWebhookUrl TEXT);`,
   `CREATE TABLE IF NOT EXISTS "account" (userId TEXT NOT NULL, type TEXT NOT NULL, provider TEXT NOT NULL, providerAccountId TEXT NOT NULL, refresh_token TEXT, access_token TEXT, expires_at INTEGER, token_type TEXT, scope TEXT, id_token TEXT, session_state TEXT);`,
   `CREATE TABLE IF NOT EXISTS "session" (sessionToken TEXT PRIMARY KEY NOT NULL, userId TEXT NOT NULL, expires INTEGER NOT NULL);`,
   `CREATE TABLE IF NOT EXISTS "verificationToken" (identifier TEXT NOT NULL, token TEXT NOT NULL, expires INTEGER NOT NULL);`,
   `CREATE TABLE IF NOT EXISTS "clients" (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, user_id TEXT, name TEXT NOT NULL, status TEXT DEFAULT 'active', kind TEXT DEFAULT 'customer');`,
   `CREATE TABLE IF NOT EXISTS "presupuestos" (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, user_id TEXT, client_id INTEGER, name TEXT NOT NULL, total_amount REAL NOT NULL, type TEXT NOT NULL, status TEXT DEFAULT 'activo');`,
-  `CREATE TABLE IF NOT EXISTS "recurring_services" (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, user_id TEXT, client_id INTEGER, name TEXT NOT NULL, amount REAL NOT NULL, type TEXT NOT NULL DEFAULT 'service', billing_day INTEGER NOT NULL DEFAULT 1, created_at INTEGER);`,
+  `CREATE TABLE IF NOT EXISTS "recurring_services" (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, user_id TEXT, client_id INTEGER, name TEXT NOT NULL, amount REAL NOT NULL, type TEXT NOT NULL DEFAULT 'service', billing_day INTEGER NOT NULL DEFAULT 1, created_at INTEGER, start_date INTEGER NOT NULL DEFAULT 1767268800, end_date INTEGER);`,
   `CREATE TABLE IF NOT EXISTS "transactions" (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, user_id TEXT, date INTEGER NOT NULL, imputed_date INTEGER, amount REAL NOT NULL, category TEXT NOT NULL, description TEXT, presupuesto_id INTEGER, service_id INTEGER, status TEXT DEFAULT 'paid');`,
 ];
 
@@ -47,10 +47,11 @@ export async function seedE2eDatabase() {
     args: [USER_ID, USER_ID, USER_ID],
   });
 
+  const jan1 = Math.floor(Date.UTC(2026, 0, 1, 12) / 1000);
   await client.execute({
-    sql: `INSERT INTO "recurring_services" (id, user_id, client_id, name, amount, type, billing_day, created_at)
-          VALUES (1, ?, 1, 'Mantenimiento Web', 50, 'service', 1, ?);`,
-    args: [USER_ID, Math.floor(Date.UTC(2026, 0, 1, 12) / 1000)],
+    sql: `INSERT INTO "recurring_services" (id, user_id, client_id, name, amount, type, billing_day, created_at, start_date, end_date)
+          VALUES (1, ?, 1, 'Mantenimiento Web', 50, 'service', 1, ?, ?, NULL);`,
+    args: [USER_ID, jan1, jan1],
   });
 
   // A transaction in the current month so the dashboard shows data by default.

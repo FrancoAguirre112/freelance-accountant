@@ -12,6 +12,11 @@ import { auth } from "@/auth";
 import { getTestSession, isE2E } from "@/lib/test-auth";
 import { revalidatePath } from "next/cache";
 import { type InferInsertModel, eq, and, between } from "drizzle-orm";
+import {
+  buildSlackMessage,
+  findDueReminders,
+  type DueReminder,
+} from "@/lib/reminders";
 
 type NewTransaction = Omit<InferInsertModel<typeof transactions>, "userId">;
 type TransactionCategory = "presupuesto" | "recurring" | "other";
@@ -176,6 +181,8 @@ export async function createRecurringServiceAction(data: {
   amount: number;
   type?: "service" | "payment";
   billingDay?: number;
+  startDate?: Date;
+  endDate?: Date | null;
 }) {
   try {
     const userId = await requireUserId();
@@ -187,6 +194,8 @@ export async function createRecurringServiceAction(data: {
       type: data.type || "service",
       billingDay: data.billingDay || 1,
       createdAt: new Date(),
+      startDate: data.startDate ?? new Date(),
+      endDate: data.endDate ?? null,
       userId,
     });
 
@@ -203,6 +212,8 @@ export async function createRecurringFromPresupuestoAction(data: {
   clientId: number;
   amount: number;
   billingDay?: number;
+  startDate?: Date;
+  endDate?: Date | null;
 }) {
   try {
     const userId = await requireUserId();
@@ -214,6 +225,8 @@ export async function createRecurringFromPresupuestoAction(data: {
       type: "payment",
       billingDay: data.billingDay || 1,
       createdAt: new Date(),
+      startDate: data.startDate ?? new Date(),
+      endDate: data.endDate ?? null,
       userId,
     });
 
@@ -325,6 +338,7 @@ export async function bulkSmartImportAction(data: RawImportData) {
               amount: r.amount,
               type: r.type === "payment" ? "payment" : "service",
               createdAt: new Date(),
+              startDate: new Date(),
               userId,
             })
             .returning({ id: recurringServices.id });
@@ -499,9 +513,18 @@ export async function getRecurringCoverageAction(from: Date, to: Date) {
   const dbTo = new Date(to);
   dbTo.setUTCHours(23, 59, 59, 999);
 
-  const services = await db.query.recurringServices.findMany({
+  const allServices = await db.query.recurringServices.findMany({
     where: eq(recurringServices.userId, userId),
     with: { client: true },
+  });
+
+  // Lifecycle filter: only services whose [startDate, endDate] intersects
+  // the queried [dbFrom, dbTo] window.
+  const services = allServices.filter((s) => {
+    const startsBeforeEnd = s.startDate.getTime() <= dbTo.getTime();
+    const endsAfterStart =
+      s.endDate == null || s.endDate.getTime() >= dbFrom.getTime();
+    return startsBeforeEnd && endsAfterStart;
   });
 
   const relatedTransactions = await db.query.transactions.findMany({
@@ -580,6 +603,105 @@ export async function getOutstandingPerEntityAction(opts?: {
         outstanding: Math.max(0, totalOwed - totalPaid),
       };
     });
+}
+
+export async function setSlackWebhookAction(url: string | null) {
+  const userId = await requireUserId();
+  const value = url?.trim() ? url.trim() : null;
+  await db.update(users).set({ slackWebhookUrl: value }).where(eq(users.id, userId));
+  revalidatePath("/");
+  return { success: true };
+}
+
+async function postToSlack(webhookUrl: string, payload: unknown) {
+  const res = await fetch(webhookUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw new Error(`Slack webhook ${res.status}: ${await res.text()}`);
+  }
+}
+
+async function findDueForUser(userId: string, today: Date): Promise<DueReminder[]> {
+  const services = await db.query.recurringServices.findMany({
+    where: eq(recurringServices.userId, userId),
+    with: { client: true },
+  });
+
+  // We only need the current month's recurring transactions to know if a
+  // billing cycle is already covered.
+  const monthStart = new Date(
+    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1),
+  );
+  const monthEnd = new Date(
+    Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0, 23, 59, 59, 999),
+  );
+  const txns = await db.query.transactions.findMany({
+    where: and(
+      eq(transactions.userId, userId),
+      eq(transactions.category, "recurring"),
+      between(transactions.date, monthStart, monthEnd),
+    ),
+    columns: { serviceId: true, category: true, date: true, imputedDate: true },
+  });
+
+  return findDueReminders(services, txns, today);
+}
+
+/**
+ * User-scoped reminder send (UI button / MCP tool).
+ * Returns {sent: false, reason} if no webhook or nothing due.
+ */
+export async function sendRecurringRemindersAction(opts?: { today?: Date }) {
+  const userId = await requireUserId();
+  const today = opts?.today ?? new Date();
+
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+    columns: { slackWebhookUrl: true },
+  });
+  if (!user?.slackWebhookUrl) {
+    return { sent: false, reason: "no_webhook_configured", due: [] as DueReminder[] };
+  }
+  const due = await findDueForUser(userId, today);
+  if (due.length === 0) {
+    return { sent: false, reason: "nothing_due", due };
+  }
+  await postToSlack(user.slackWebhookUrl, buildSlackMessage(due, today));
+  return { sent: true, due };
+}
+
+/**
+ * Cron entry point: iterates every user with a webhook configured.
+ * Not exposed as a normal server action — called from /api/cron/reminders
+ * after the CRON_SECRET check.
+ */
+export async function sendRemindersForAllUsers(today: Date = new Date()) {
+  const all = await db.query.users.findMany({
+    columns: { id: true, slackWebhookUrl: true },
+  });
+  const summary: { userId: string; sent: number; error?: string }[] = [];
+  for (const u of all) {
+    if (!u.slackWebhookUrl) continue;
+    try {
+      const due = await findDueForUser(u.id, today);
+      if (due.length === 0) {
+        summary.push({ userId: u.id, sent: 0 });
+        continue;
+      }
+      await postToSlack(u.slackWebhookUrl, buildSlackMessage(due, today));
+      summary.push({ userId: u.id, sent: due.length });
+    } catch (err) {
+      summary.push({
+        userId: u.id,
+        sent: 0,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+  return { ranAt: today.toISOString(), summary };
 }
 
 export async function setProfileTypeAction(

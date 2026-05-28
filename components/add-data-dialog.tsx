@@ -155,12 +155,18 @@ export function AddDataDialog({
     const formData = new FormData(form);
 
     try {
+      const startDateStr = formData.get("startDate") as string;
+      const endDateStr = formData.get("endDate") as string;
       const res = await createRecurringServiceAction({
         name: formData.get("name") as string,
         clientId: parseInt(formData.get("clientName") as string),
         amount: parseFloat(formData.get("amount") as string),
         type: formData.get("recurringType") as "service" | "payment",
         billingDay: parseInt(formData.get("billingDay") as string) || 1,
+        startDate: startDateStr
+          ? new Date(startDateStr + "T12:00:00Z")
+          : new Date(),
+        endDate: endDateStr ? new Date(endDateStr + "T12:00:00Z") : null,
       });
 
       if (res.success) {
@@ -416,6 +422,24 @@ export function AddDataDialog({
                 <Label>Día de cobro/pago</Label>
                 <Input name="billingDay" type="number" min="1" max="31" defaultValue="1" required />
                 <p className="text-xs text-muted-foreground">Día del mes en que se cobra o paga (1-31)</p>
+              </div>
+              <div className="gap-4 grid grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Fecha de inicio</Label>
+                  <Input
+                    name="startDate"
+                    type="date"
+                    defaultValue={new Date().toISOString().slice(0, 10)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Fecha de fin (opcional)</Label>
+                  <Input name="endDate" type="date" />
+                  <p className="text-xs text-muted-foreground">
+                    Si no la pones, la recurrencia se considera vigente.
+                  </p>
+                </div>
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Configurar Recurrencia"}

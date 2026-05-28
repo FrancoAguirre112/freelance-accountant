@@ -8,7 +8,7 @@ import { ActiveTabProvider } from "@/components/active-tab-context";
 import { SyncedTabs } from "@/components/synced-tabs";
 import { UserMenu } from "@/components/user-menu";
 import { db } from "@/db";
-import { clients, presupuestos, recurringServices, transactions } from "@/db/schema";
+import { clients, presupuestos, recurringServices, transactions, users } from "@/db/schema";
 import { eq, and, between, desc } from "drizzle-orm";
 import { PresupuestosTab } from "@/components/presupuestos-tab";
 import { MaintenanceTab } from "@/components/maintenance-tab";
@@ -43,6 +43,11 @@ export default async function DashboardPage({
 
   const session = isE2E() ? getTestSession() : await auth();
   const userId = session!.user.id;
+
+  const userSettings = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+    columns: { slackWebhookUrl: true },
+  });
 
   const [allClients, allPresupuestos, allServices] = await Promise.all([
     db.query.clients.findMany({
@@ -160,7 +165,7 @@ export default async function DashboardPage({
           <ClientsDatabaseDialog clients={allClients} outstandingMap={outstandingByClient} />
           <div className="mx-1 bg-border w-[1px] h-8 shrink-0" />
           <ChangelogButton />
-          <SettingsDialog />
+          <SettingsDialog slackWebhookUrl={userSettings?.slackWebhookUrl} />
           <ThemeToggle />
           <UserMenu />
         </div>

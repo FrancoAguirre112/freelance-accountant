@@ -13,7 +13,8 @@ const DDL = [
     email TEXT UNIQUE,
     emailVerified INTEGER,
     image TEXT,
-    profileType TEXT
+    profileType TEXT,
+    slackWebhookUrl TEXT
   );`,
   `CREATE TABLE "account" (
     userId TEXT NOT NULL,
@@ -62,7 +63,9 @@ const DDL = [
     amount REAL NOT NULL,
     type TEXT NOT NULL DEFAULT 'service',
     billing_day INTEGER NOT NULL DEFAULT 1,
-    created_at INTEGER
+    created_at INTEGER,
+    start_date INTEGER NOT NULL DEFAULT 1767268800,
+    end_date INTEGER
   );`,
   `CREATE TABLE "transactions" (
     id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,

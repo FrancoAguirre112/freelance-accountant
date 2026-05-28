@@ -349,19 +349,31 @@ server.registerTool(
 server.registerTool(
   "create_recurring",
   {
-    description: "Create a recurring service.",
+    description:
+      "Create a recurring service. `startDate` defaults to today; `endDate` is optional (omit for ongoing).",
     inputSchema: {
       name: z.string().min(1),
       clientId: z.number().int(),
       amount: z.number(),
       type: z.enum(["service", "payment"]).default("service"),
       billingDay: z.number().int().min(1).max(31).default(1),
+      startDate: z
+        .string()
+        .describe("ISO date, e.g. 2026-01-01")
+        .optional(),
+      endDate: z.string().optional(),
     },
   },
-  async (input) => {
+  async ({ startDate, endDate, ...rest }) => {
     const [row] = await db
       .insert(recurringServices)
-      .values({ ...input, createdAt: new Date(), userId: USER_ID })
+      .values({
+        ...rest,
+        createdAt: new Date(),
+        startDate: startDate ? parseDate(startDate) : new Date(),
+        endDate: endDate ? parseDate(endDate) : null,
+        userId: USER_ID,
+      })
       .returning();
     return ok(row);
   },
@@ -370,7 +382,8 @@ server.registerTool(
 server.registerTool(
   "update_recurring",
   {
-    description: "Update a recurring service.",
+    description:
+      "Update a recurring service. Pass `endDate` to mark a service as ended (e.g. you lost the client); pass `endDate: null` to reopen.",
     inputSchema: {
       id: z.number().int(),
       name: z.string().optional(),
@@ -378,12 +391,18 @@ server.registerTool(
       billingDay: z.number().int().min(1).max(31).optional(),
       type: z.enum(["service", "payment"]).optional(),
       clientId: z.number().int().optional(),
+      startDate: z.string().optional(),
+      endDate: z.string().nullable().optional(),
     },
   },
-  async ({ id, ...patch }) => {
+  async ({ id, startDate, endDate, ...patch }) => {
+    const set: Record<string, unknown> = { ...patch };
+    if (startDate !== undefined) set.startDate = parseDate(startDate);
+    if (endDate !== undefined)
+      set.endDate = endDate === null ? null : parseDate(endDate);
     await db
       .update(recurringServices)
-      .set(patch)
+      .set(set)
       .where(
         and(
           eq(recurringServices.id, id),
@@ -630,6 +649,87 @@ server.registerTool(
       };
     });
     return ok(result);
+  },
+);
+
+server.registerTool(
+  "set_slack_webhook",
+  {
+    description:
+      "Save (or clear) the Slack incoming-webhook URL used for recurring-payment reminders. Pass `url: null` to disable.",
+    inputSchema: { url: z.string().url().nullable() },
+  },
+  async ({ url }) => {
+    await db
+      .update(schema.users)
+      .set({ slackWebhookUrl: url })
+      .where(eq(schema.users.id, USER_ID));
+    return ok({ success: true });
+  },
+);
+
+server.registerTool(
+  "send_recurring_reminders",
+  {
+    description:
+      "Compute which recurring services are due today (billingDay == today, current month unpaid, active lifecycle) and post a Slack message via the configured webhook. Pass `date` (YYYY-MM-DD) to dry-run for another day. Returns the due list either way.",
+    inputSchema: { date: z.string().optional() },
+  },
+  async ({ date }) => {
+    const today = date ? parseDate(date) : new Date();
+    const user = await db.query.users.findFirst({
+      where: eq(schema.users.id, USER_ID),
+      columns: { slackWebhookUrl: true },
+    });
+
+    const monthStart = new Date(
+      Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1),
+    );
+    const monthEnd = new Date(
+      Date.UTC(
+        today.getUTCFullYear(),
+        today.getUTCMonth() + 1,
+        0,
+        23, 59, 59, 999,
+      ),
+    );
+
+    const services = await db.query.recurringServices.findMany({
+      where: eq(recurringServices.userId, USER_ID),
+      with: { client: true },
+    });
+    const txns = await db.query.transactions.findMany({
+      where: and(
+        eq(transactions.userId, USER_ID),
+        eq(transactions.category, "recurring"),
+        between(transactions.date, monthStart, monthEnd),
+      ),
+      columns: {
+        serviceId: true,
+        category: true,
+        date: true,
+        imputedDate: true,
+      },
+    });
+
+    const { findDueReminders, buildSlackMessage } = await import("@/lib/reminders");
+    const due = findDueReminders(services, txns, today);
+
+    if (!user?.slackWebhookUrl) {
+      return ok({ sent: false, reason: "no_webhook_configured", due });
+    }
+    if (due.length === 0) {
+      return ok({ sent: false, reason: "nothing_due", due });
+    }
+    const res = await fetch(user.slackWebhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(buildSlackMessage(due, today)),
+    });
+    if (!res.ok) {
+      return fail(`Slack webhook ${res.status}: ${await res.text()}`);
+    }
+    return ok({ sent: true, due });
   },
 );
 
