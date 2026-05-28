@@ -205,6 +205,16 @@ export function MaintenanceTab({
     const dueStatus: "vencido" | "por_vencer" | "al_dia" =
       diffDays < 0 ? "vencido" : diffDays <= 2 ? "por_vencer" : "al_dia";
 
+    // Also build a per-month transactions map across ALL history so the
+    // prev-month context cell (arrears) can list the right transactions.
+    const allTransactionsByMonth: Record<string, Transaction[]> = {};
+    allServiceTrans.forEach((t) => {
+      const dateToUse = t.imputedDate || t.date;
+      const key = dateToUse.toISOString().slice(0, 7);
+      if (!allTransactionsByMonth[key]) allTransactionsByMonth[key] = [];
+      allTransactionsByMonth[key].push(t);
+    });
+
     return {
       serviceId: service.id,
       serviceName: service.name,
@@ -215,6 +225,8 @@ export function MaintenanceTab({
       totalCollected,
       paymentsByMonth,
       transactionsByMonth,
+      allPaymentsByMonth,
+      allTransactionsByMonth,
       lastPaidDate,
       nextDueDate,
       billingDay,
@@ -434,16 +446,42 @@ export function MaintenanceTab({
             ) : (
               sortedData.map((item) => {
                 const isPayment = item.serviceType === "payment";
+                const lifecycle = {
+                  startDate: item.startDate,
+                  endDate: item.endDate,
+                };
                 // Only show months inside the service lifecycle
-                const activeMonths = months.filter((m) =>
-                  isServiceActiveInMonth(
-                    { startDate: item.startDate, endDate: item.endDate },
-                    m.id,
-                  ),
+                const baseActiveMonths = months.filter((m) =>
+                  isServiceActiveInMonth(lifecycle, m.id),
                 );
+                // Arrears context: prepend the month BEFORE the visible
+                // range. Under the paid-in-arrears convention that cycle is
+                // what was supposed to be paid during the current view, so
+                // hiding it makes "Pendiente" feel wrong — the user can't
+                // see whether the previous cycle was actually paid.
+                const prevFromDate = new Date(from);
+                prevFromDate.setUTCMonth(prevFromDate.getUTCMonth() - 1);
+                const [prevMonth] = getSafeMonthsInRange(
+                  prevFromDate,
+                  prevFromDate,
+                );
+                const prevAlreadyIn = baseActiveMonths.some(
+                  (m) => m.id === prevMonth.id,
+                );
+                const prevInLifecycle = isServiceActiveInMonth(
+                  lifecycle,
+                  prevMonth.id,
+                );
+                const activeMonths =
+                  !prevAlreadyIn && prevInLifecycle
+                    ? [prevMonth, ...baseActiveMonths]
+                    : baseActiveMonths;
                 let monthsCovered = 0;
                 const details = activeMonths.map((m) => {
-                  const paid = item.paymentsByMonth[m.id] || 0;
+                  // All-time map so the prepended previous month (and any
+                  // month whose payment lives outside the view range) shows
+                  // its real coverage.
+                  const paid = item.allPaymentsByMonth[m.id] || 0;
                   const isCovered = isMonthCovered(
                     item.serviceType,
                     paid,
@@ -589,7 +627,8 @@ export function MaintenanceTab({
                                   </div>
                                 ))}
                               {details.map((d, idx) => {
-                                const monthTransactions = item.transactionsByMonth[d.id] || [];
+                                const monthTransactions =
+                                  item.allTransactionsByMonth[d.id] || [];
 
                                 return (
                                 <div
